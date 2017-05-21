@@ -6,40 +6,23 @@ import re
 import sys
 import yaml
 
-from util import listify, dict_list_product, uniquify
+from util import merge, listify, dict_list_product, uniquify
 
 from ninja_syntax import Writer
 
-def merge(a, b, path=None, override=False, change_listorder=False):
-    "merges b into a"
-    if path is None: path = []
-    for key in b:
-        if key in a:
-            if isinstance(a[key], dict) and isinstance(b[key], dict):
-                merge(a[key], b[key], path=path + [str(key)], override=override)
-            elif isinstance(a[key], set) and isinstance(b[key], set):
-                a[key] = a[key] | b[key]
-            elif isinstance(a[key], list) and isinstance(b[key], list):
-                if change_listorder:
-                    a[key] = uniquify(b[key] + a[key])
-                else:
-                    a[key] = uniquify(a[key] + b[key])
-            elif a[key] == b[key]:
-                pass # same leaf value
-            else:
-                if override:
-                    a[key] = b[key]
-                else:
-                    raise Exception('Conflict at %s' % '.'.join(path + [str(key)]))
-        else:
-            a[key] = b[key]
-    return a
+files_set = set()
 
-def yaml_load(filename):
+def yaml_load(filename, path=None):
+    path = path or ""
+
+    print("yaml_load(): loading %s with relpath %s", filename, path)
+
+    files_set.add(filename)
+
     def do_include(data):
         includes = listify(data.get("include"))
         for include in includes:
-            _data = yaml_load(os.path.join(os.path.dirname(filename), include))[0]
+            _data = yaml_load(os.path.join(os.path.dirname(filename), include), path)[0]
             _data.pop("ignore", None)
             if "template" in _data:
                 raise InvalidJSONException("template statement in included file currently not supported!")
@@ -70,14 +53,23 @@ def yaml_load(filename):
         return result
     else:
         data = do_include(data)
-        return [data]
+        data["_relpath"] = path
+        res = [data]
+        for subdir in listify(data.get("subdir", [])):
+            relpath = os.path.join(path, subdir)
+            res.extend(yaml_load(os.path.join(subdir, "build.yml"), relpath))
+        return res
 
 class Declaration(object):
     def __init__(s, **kwargs):
         s.args = kwargs
+        s.relpath = s.args.get("_relpath")
 
     def post_parse():
         pass
+
+    def locate_source(s, filename):
+        return "${root}" + os.path.join(s.relpath, filename)
 
 class Context(Declaration):
     map = {}
@@ -269,6 +261,7 @@ class App(Declaration):
 
             #
             context = Context(add_to_map=False, name=s.name, parent=context, vars=s.args.get("vars", {}))
+
             print("  build", s.name, "for", name)
             modules_used_map = {}
             modules = []
@@ -285,6 +278,7 @@ class App(Declaration):
             objects = []
             for module in modules:
                 for source in listify(module.args.get("sources", [])):
+                    source = module.locate_source(source)
                     rule = Rule.get_by_extension(source)
                     vars = module.get_vars(context)
                     obj = context.get_filepath(source[:-2]+rule.args.get("out"))
@@ -310,16 +304,26 @@ class_map = {
         "app" : App,
         }
 
-data = yaml_load(sys.argv[1])[0]
+data_list = yaml_load(sys.argv[1])
 
 writer = Writer(open("build.ninja", "w"))
+#
+
+files_list = []
+for filename in files_set:
+    files_list.append("${root}" + filename)
+writer.rule("relaze", "./laze.py ${in}", restat=True, generator=True)
+writer.build(rule="relaze", outputs="${root}build.ninja", implicit=files_list, inputs="${root}"+sys.argv[1])
 
 # PARSING PHASE
 # create objects
-for name, _class in class_map.items():
-    datas = listify(data.get(name, []))
-    for _data in datas:
-        _class(**_data)
+for data in data_list:
+    relpath = data.get("_relpath", "")
+    for name, _class in class_map.items():
+        datas = listify(data.get(name, []))
+        for _data in datas:
+            _data["_relpath"] = relpath
+            _class(**_data)
 
 no_post_parse_classes = { Builder }
 
