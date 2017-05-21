@@ -157,12 +157,15 @@ class Rule(Declaration):
         s.name = s.args["name"]
         s.cmd = s.args["cmd"]
 
-        in_ext = s.args["in"]
-        if in_ext in Rule.rule_map:
-            print("error: %s extension already taken")
-            return
+        try:
+            in_ext = s.args["in"]
+            if in_ext in Rule.rule_map:
+                print("error: %s extension already taken")
+                return
+            Rule.rule_map[in_ext] = s
+        except KeyError:
+            pass
 
-        Rule.rule_map[in_ext] = s
         Rule.rule_name_map[s.name] = s
 
         s.create_var_list()
@@ -186,9 +189,10 @@ class Rule(Declaration):
         s.var_list = var_names
 
     def to_ninja(s, writer):
-        writer.rule(s.name, s.cmd)
+        writer.rule(s.name, s.cmd, description="%s ${out}" % s.name)
 
-    def to_ninja_build(s, writer, _in, _out, _vars):
+    def to_ninja_build(s, writer, _in, _out, _vars=None):
+        _vars = _vars or {}
         vars = {}
         for name in s.var_list:
             try:
@@ -291,7 +295,10 @@ class App(Declaration):
             link = Rule.get_by_name("LINK")
             outfile = context.get_filepath(s.name)
 
-            link.to_ninja_build(writer, objects, outfile, context.get_vars())
+            res = link.to_ninja_build(writer, objects, outfile, context.get_vars())
+            if res != outfile:
+                symlink = Rule.get_by_name("SYMLINK")
+                symlink.to_ninja_build(writer, res, outfile)
 
             print("")
 
