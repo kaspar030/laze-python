@@ -52,13 +52,19 @@ def deep_replace(obj, replace):
     else:
         return obj
 
-def merge(a, b, path=None, override=False, change_listorder=False):
+def merge(a, b, path=None, override=False, change_listorder=False, only_existing=False, join_lists=False):
     "merges b into a"
     if path is None: path = []
     for key in b:
         if key in a:
+            if join_lists:
+                if isinstance(a[key], list) and not isinstance(b[key], list):
+                    b[key] = [b[key]]
+                elif (not isinstance(a[key], list)) and isinstance(b[key], list):
+                    a[key] = [a[key]]
+
             if isinstance(a[key], dict) and isinstance(b[key], dict):
-                merge(a[key], b[key], path=path + [str(key)], override=override)
+                merge(a[key], b[key], path=path + [str(key)], override=override, join_lists=join_lists)
             elif isinstance(a[key], set) and isinstance(b[key], set):
                 a[key] = a[key] | b[key]
             elif isinstance(a[key], list) and isinstance(b[key], list):
@@ -68,12 +74,14 @@ def merge(a, b, path=None, override=False, change_listorder=False):
                     a[key] = uniquify(a[key] + b[key])
             elif a[key] == b[key]:
                 pass # same leaf value
+            elif a[key] == None:
+                a[key] = b[key]
             else:
                 if override:
                     a[key] = b[key]
                 else:
-                    raise Exception('Conflict at %s' % '.'.join(path + [str(key)]))
+                    raise Exception('Conflict at %s (%s, %s)' % ('.'.join(path + [str(key)]), a[key], b[key]))
         else:
-            a[key] = b[key]
+            if not only_existing:
+                a[key] = b[key]
     return a
-
