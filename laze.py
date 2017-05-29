@@ -49,7 +49,7 @@ def yaml_load(filename, path=None, defaults=None):
         if _defaults:
             _defaults = copy.deepcopy(_defaults)
             if data_defaults:
-                defaults.merge(defaults, data_defaults)
+                merge(_defaults, data_defaults)
         else:
             _defaults = data_defaults
 
@@ -246,6 +246,24 @@ class Rule(Declaration):
             writer.build(outputs=_out, rule=s.name, inputs=_in, variables=vars)
             return _out
 
+def list_remove(_list):
+    if _list:
+        remove = set()
+        for entry in _list:
+            if entry[0] == '-':
+                remove.add(entry)
+                remove.add(entry[1:])
+
+        if remove:
+            _set = frozenset(_list)
+            for entry in _set & remove:
+                _list.remove(entry)
+
+_in = "/-"
+_out = "__"
+
+transtab = str.maketrans(_in, _out)
+
 class Module(Declaration):
     list = []
     def __init__(s, **kwargs):
@@ -258,6 +276,9 @@ class Module(Declaration):
             else:
                 raise InvalidArgument("module missing name")
             s.args["name"] = s.name
+
+        list_remove(s.args.get("depends"))
+        list_remove(s.args.get("uses"))
 
         s.context = None
         s.get_nested_cache = {}
@@ -333,11 +354,15 @@ class Module(Declaration):
             return context.get_vars()
 
     def get_defines(s, context, module_set):
-        dep_names = set([ x.name for x in s.get_used(context)])
-        deps_available = dep_names & module_set
+        if "all" in listify(s.args.get("uses", [])):
+            deps_available = module_set
+        else:
+            dep_names = set([ x.name for x in s.get_used(context)])
+            deps_available = dep_names & module_set
+
         dep_defines = []
         for dep_name in sorted(deps_available):
-            dep_defines.append("-DMODULE_" + dep_name.upper())
+            dep_defines.append("-DMODULE_" + dep_name.upper().translate(transtab))
         return dep_defines
 
 class App(Module):
@@ -374,7 +399,14 @@ class App(Module):
             module_set = set()
             for module in modules:
                 module_set.add(module.name)
-                #print("    %s:" % module.name, module.args.get("sources"), "deps:", module.args.get("depends"))
+                print("    %s:" % module.name, module.args.get("sources"))
+                _tmp = module.args.get("depends")
+                if _tmp:
+                    print("    %s: deps:" % module.name, _tmp)
+                _tmp = module.args.get("uses")
+                if _tmp:
+                    print("    %s: uses:" % module.name, _tmp)
+
                 module_global_vars = module.args.get('global_vars', {})
                 if module_global_vars:
                     merge(vars, module_global_vars)
@@ -407,7 +439,6 @@ class App(Module):
                     obj = rule.to_ninja_build(writer, source, obj, vars)
                     objects.append(obj)
                     #print ( source) #, module.get_vars(context), rule.name)
-
 
             link = Rule.get_by_name("LINK")
             outfile = context.get_filepath(s.name)+".elf"
