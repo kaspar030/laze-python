@@ -4,11 +4,12 @@ import copy
 import os
 import re
 import sys
+import time
 import yaml
 
 import click
 
-from util import merge, listify, dict_list_product, uniquify
+from util import merge, listify, dict_list_product, uniquify, deep_replace
 
 from ninja_syntax import Writer
 
@@ -18,12 +19,18 @@ class InvalidArgument(Exception):
     pass
 
 class ModuleNotAvailable(Exception):
-    pass
+    def __init__(s, context, module, dependency):
+        s.context = context
+        s.module = module
+        s.dependency = dependency
+
+    def __str__(s):
+        return "%s in %s depends on unavailable module \"%s\"" % (s.module, s.context, s.dependency)
 
 def yaml_load(filename, path=None, defaults=None):
     path = path or ""
 
-    print("yaml_load(): loading %s with relpath %s" % (filename, path))
+    #print("yaml_load(): loading %s with relpath %s" % (filename, path))
 
     files_set.add(filename)
 
@@ -61,18 +68,19 @@ def yaml_load(filename, path=None, defaults=None):
             merge(data, _defaults, override=False, only_existing=True, join_lists=True)
             #print("yaml_load(): merging defaults, result:  ", data)
 
-        template = data.get('template')
+        template = data.pop('template', None)
 
         if template:
-            data.pop('template')
             result = []
             i = 0
             for repl in dict_list_product(template):
                 _data = copy.deepcopy(data)
+                _data["_relpath"] = path
                 _data = deep_replace(_data, repl)
                 _data = do_include(_data)
                 _data["template_instance"] = repl
                 _data["template_instance_num"] = i
+
                 result.append(_data)
                 i += 1
             res.extend(result)
@@ -85,6 +93,7 @@ def yaml_load(filename, path=None, defaults=None):
                 res.extend(yaml_load(os.path.join(relpath, "build.yml"),
                     path=relpath,
                     defaults=_defaults))
+
     return res
 
 class Declaration(object):
@@ -118,7 +127,7 @@ class Context(Declaration):
         if add_to_map:
             Context.map[s.name] = s
 
-        print("CONTEXT", s.name)
+        #print("CONTEXT", s.name)
 
     def __repr__(s, nest=False):
         res = "Context(" if not nest else ""
@@ -185,6 +194,8 @@ class Rule(Declaration):
         super().__init__(**kwargs)
         s.name = s.args["name"]
         s.cmd = s.args["cmd"]
+        s.depfile = s.args.get("depfile")
+        s.deps = s.args.get("deps")
 
         try:
             in_ext = s.args["in"]
@@ -214,11 +225,11 @@ class Rule(Declaration):
             name = name[2:-1]
             if not name in { 'in', 'out' }:
                 var_names.append(name)
-        print("RULE", s.name, "vars:", var_names)
+        #print("RULE", s.name, "vars:", var_names)
         s.var_list = var_names
 
     def to_ninja(s, writer):
-        writer.rule(s.name, s.cmd, description="%s ${out}" % s.name)
+        writer.rule(s.name, s.cmd, description="%s ${out}" % s.name, deps=s.deps, depfile=s.depfile)
 
     def to_ninja_build(s, writer, _in, _out, _vars=None):
         _vars = _vars or {}
@@ -291,11 +302,11 @@ class Module(Declaration):
             context = Context.map.get(context_name)
             module.context = context
             context.modules[module.args.get("name")] = module
-            print("MODULE", module.name, "in", context)
+            #print("MODULE", module.name, "in", context)
 
     def get_nested(s, context, name, notfound_error=True, seen=None):
         try:
-            for module in s.get_nested_cache[context.name][name]:
+            for module in s.get_nested_cache[context][name]:
                 yield module
             return
         except KeyError:
@@ -309,19 +320,41 @@ class Module(Declaration):
 
         cache = []
 
+        #print("get_nested()", name, context, s.name)
         for module_name in listify(s.args.get(name, [])):
-            module = context.get_module(module_name)
-            if not module:
-                if notfound_error:
-                    raise ModuleNotAvailable("module \"%s\" in %s depends on unavailable module \"%s\"" %
-                            ( s.name, context, module_name))
+            if module_name == "all":
                 continue
 
-            for _module in module.get_nested(context, name, notfound_error, seen):
-                cache.append(_module)
-                yield _module
-            cache.append(module)
-            yield module
+            #print(module_name)
+            tmp = []
+
+            # notfound_error will be overwritten below for optional
+            # dependencies, so use copy
+            _notfound_error = notfound_error
+
+            if module_name.startswith("?"):
+                _notfound_error = False
+                module_name = module_name[1:]
+
+            module = context.get_module(module_name)
+            if not module:
+                if _notfound_error:
+                    raise ModuleNotAvailable(context, s.name, module_name)
+                else:
+                    pass
+                    #print("laze: %s: optional dependency %s not found." % (s.name, module_name))
+                continue
+
+            try:
+                for _module in module.get_nested(context, name, notfound_error=notfound_error, seen=seen):
+                    tmp.append(_module)
+                tmp.append(module)
+                cache.extend(tmp)
+                for module in tmp:
+                    yield module
+            except ModuleNotAvailable as e:
+                if _notfound_error:
+                    raise e
 
         s.get_nested_cache[context] = { name : uniquify(cache) }
 
@@ -373,14 +406,14 @@ class App(Module):
     def __init__(s, **kwargs):
         super().__init__(**kwargs)
         s.__class__.list.append(s)
-        print("APP_", s.name, "path:", s.relpath)
+        #print("APP_", s.name, "path:", s.relpath)
 
     def post_parse():
         for app in App.list:
             app.build()
 
     def build(s):
-        print("APP", s.name)
+        #print("APP", s.name)
         for name, context in Context.map.items():
             if context.__class__ != Builder:
                 continue
@@ -389,7 +422,7 @@ class App(Module):
             context = Context(add_to_map=False, name=s.name, parent=context, vars=s.args.get("vars", {}))
             vars = context.get_vars()
 
-            print("  build", s.name, "for", name)
+            #print("  build", s.name, "for", name)
             try:
                 modules = [s] + uniquify(s.get_deps(context))
             except ModuleNotAvailable as e:
@@ -401,13 +434,13 @@ class App(Module):
             module_set = set()
             for module in modules:
                 module_set.add(module.name)
-                print("    %s:" % module.name, module.args.get("sources"))
-                _tmp = module.args.get("depends")
-                if _tmp:
-                    print("    %s: deps:" % module.name, _tmp)
-                _tmp = module.args.get("uses")
-                if _tmp:
-                    print("    %s: uses:" % module.name, _tmp)
+                #print("    %s:" % module.name, module.args.get("sources"))
+                #_tmp = module.args.get("depends")
+                #if _tmp:
+                #    print("    %s: deps:" % module.name, _tmp)
+                #_tmp = module.args.get("uses")
+                #if _tmp:
+                #    print("    %s: uses:" % module.name, _tmp)
 
                 module_global_vars = module.args.get('global_vars', {})
                 if module_global_vars:
@@ -427,8 +460,8 @@ class App(Module):
                     rule = Rule.get_by_extension(source)
                     vars = module.get_vars(context)
 
-                    if module_defines:
                     # add "-DMODULE_<module_name> for each used/depended module
+                    if module_defines:
                         vars = copy.deepcopy(vars)
                         cflags = vars.get("CFLAGS", [])
                         if cflags:
@@ -450,7 +483,7 @@ class App(Module):
                 symlink = Rule.get_by_name("SYMLINK")
                 symlink.to_ninja_build(writer, res, outfile)
 
-            print("")
+#            print("")
 
 class_map = {
         "context" : Context,
@@ -464,7 +497,10 @@ class_map = {
 @click.argument('buildfile')
 def generate(buildfile):
     global writer
+    before = time.time()
     data_list = yaml_load(buildfile)
+
+    print("laze: loading buildfiles took %.2fs" % (time.time()-before))
 
     writer = Writer(open("build.ninja", "w"))
     #
@@ -476,6 +512,7 @@ def generate(buildfile):
     writer.rule("relaze", "laze generate ${in}", restat=True, generator=True)
     writer.build(rule="relaze", outputs="${root}build.ninja", implicit=files_list, inputs="${root}"+buildfile)
 
+    before = time.time()
     # PARSING PHASE
     # create objects
     for data in data_list:
@@ -494,6 +531,7 @@ def generate(buildfile):
             continue
         _class.post_parse()
 
+    print("laze: processing buildfiles took %.2fs" % (time.time()-before))
     print("laze: building %s applications" % App.count)
     if Rule.rule_num:
         print("laze: cached: %s/%s (%.2f%%)" % (Rule.rule_cached, Rule.rule_num, Rule.rule_cached*100/Rule.rule_num))

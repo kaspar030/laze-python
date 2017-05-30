@@ -85,3 +85,21 @@ def merge(a, b, path=None, override=False, change_listorder=False, only_existing
             if not only_existing:
                 a[key] = b[key]
     return a
+
+def deep_replace(obj, replace):
+    if type(obj) == list:
+        _obj = []
+        for entry in obj:
+            _obj.append(deep_replace(entry, replace))
+        return _obj
+    elif type(obj) == dict:
+        _obj = {}
+        for key, val in obj.items():
+            _obj[key] = deep_replace(val, replace)
+        return _obj
+    elif type(obj) == str:
+        for key, val in replace.items():
+            obj = obj.replace(key, val)
+        return obj
+    else:
+        return obj
