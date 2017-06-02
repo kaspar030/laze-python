@@ -9,7 +9,7 @@ import yaml
 
 import click
 
-from util import merge, listify, dict_list_product, uniquify, deep_replace
+from util import merge, listify, dict_list_product, uniquify, deep_replace, dict_get
 
 from ninja_syntax import Writer
 
@@ -63,8 +63,8 @@ def yaml_load(filename, path=None, defaults=None):
             _defaults = data_defaults
 
         if _defaults:
-            #print("yaml_load(): merging defaults, base:    ", data)
-            #print("yaml_load(): merging defaults, defaults:", _defaults)
+            print("yaml_load(): merging defaults, base:    ", data)
+            print("yaml_load(): merging defaults, defaults:", _defaults)
             merge(data, _defaults, override=False, only_existing=True, join_lists=True)
             #print("yaml_load(): merging defaults, result:  ", data)
 
@@ -290,8 +290,13 @@ class Module(Declaration):
                 raise InvalidArgument("module missing name")
             s.args["name"] = s.name
 
+        uses = dict_get(s.args, "uses", [])
+        list_remove(uses)
         list_remove(s.args.get("depends"))
-        list_remove(s.args.get("uses"))
+
+        for name in listify(s.args.get("depends")):
+            if name.startswith("?"):
+                uses.append(name[1:])
 
         s.context = None
         s.get_nested_cache = {}
@@ -304,73 +309,50 @@ class Module(Declaration):
             context.modules[module.args.get("name")] = module
             #print("MODULE", module.name, "in", context)
 
-    def get_nested(s, context, name, notfound_error=True, seen=None):
+    def get_nested(s, context, name, notfound_error=True):
         try:
-            for module in s.get_nested_cache[context][name]:
-                yield module
-            return
+            #print("get_nested(%s) returning cache " % name, s.name, [ x.name for x in s.get_nested_cache[context][name][s]])
+            return s.get_nested_cache[context][name][s]
         except KeyError:
             pass
 
-        seen = seen or set()
-        if s in seen:
-            return
+        module_names = set(listify(s.args.get(name, [])))
+        modules = set()
+        all_module_names = set()
+        while module_names:
+            all_module_names |= module_names
+            for module_name in module_names:
+                _notfound_error = notfound_error
+                if module_name == "all":
+                    continue
+                if module_name.startswith("?"):
+                    _notfound_error = False
+                    module_name = module_name[1:]
+                    all_module_names.add(module_name)
 
-        seen.add(s)
+                module = context.get_module(module_name)
+                if not module:
+                    if _notfound_error:
+                        raise ModuleNotAvailable(context, s.name, module_name)
+                    continue
+                modules.add(module)
+            new_module_names = set()
+            for module in modules:
+                new_module_names |= set(listify(module.args.get(name, [])))
 
-        cache = []
+            module_names = new_module_names - all_module_names
 
-        #print("get_nested()", name, context, s.name)
-        for module_name in listify(s.args.get(name, [])):
-            if module_name == "all":
-                continue
+        res = sorted(list(modules), key=lambda x:x.name)
 
-            #print(module_name)
-            tmp = []
+        #print("get_nested(%s) setting cache" % name, { s.name : [x.name for x in res] })
+        tmp = dict_get(s.get_nested_cache, context, {})
+        merge(tmp, { name : {s: res }})
 
-            # notfound_error will be overwritten below for optional
-            # dependencies, so use copy
-            _notfound_error = notfound_error
-
-            if module_name.startswith("?"):
-                _notfound_error = False
-                module_name = module_name[1:]
-
-            module = context.get_module(module_name)
-            if not module:
-                if _notfound_error:
-                    raise ModuleNotAvailable(context, s.name, module_name)
-                else:
-                    pass
-                    #print("laze: %s: optional dependency %s not found." % (s.name, module_name))
-                continue
-
-            try:
-                for _module in module.get_nested(context, name, notfound_error=notfound_error, seen=seen):
-                    tmp.append(_module)
-                tmp.append(module)
-                cache.extend(tmp)
-                for module in tmp:
-                    yield module
-            except ModuleNotAvailable as e:
-                if _notfound_error:
-                    raise e
-
-        s.get_nested_cache[context] = { name : uniquify(cache) }
+        return res
 
     def get_deps(s, context):
         for dep in s.get_nested(context, "depends"):
             yield dep
-
-#        for module_name in listify(s.args.get("depends", [])):
-#            module = context.get_module(module_name)
-#            if not module:
-#                print("module", module_name, "not found in context", context)
-#                continue
-#
-#            for _module in module.get_deps(context):
-#                yield _module
-#            yield module
 
     def get_used(s, context):
         for used in s.get_nested(context, "uses", notfound_error=False):
@@ -413,7 +395,7 @@ class App(Module):
             app.build()
 
     def build(s):
-        #print("APP", s.name)
+        print("APP", s.name)
         for name, context in Context.map.items():
             if context.__class__ != Builder:
                 continue
@@ -422,7 +404,7 @@ class App(Module):
             context = Context(add_to_map=False, name=s.name, parent=context, vars=s.args.get("vars", {}))
             vars = context.get_vars()
 
-            #print("  build", s.name, "for", name)
+            print("  build", s.name, "for", name)
             try:
                 modules = [s] + uniquify(s.get_deps(context))
             except ModuleNotAvailable as e:
@@ -434,27 +416,27 @@ class App(Module):
             module_set = set()
             for module in modules:
                 module_set.add(module.name)
-                #print("    %s:" % module.name, module.args.get("sources"))
-                #_tmp = module.args.get("depends")
-                #if _tmp:
-                #    print("    %s: deps:" % module.name, _tmp)
-                #_tmp = module.args.get("uses")
-                #if _tmp:
-                #    print("    %s: uses:" % module.name, _tmp)
+                print("    %s:" % module.name, module.args.get("sources"))
+                _tmp = module.args.get("depends")
+                if _tmp:
+                    print("    %s: deps:" % module.name, _tmp)
+                _tmp = module.args.get("uses")
+                if _tmp:
+                    print("    %s: uses:" % module.name, _tmp)
 
                 module_global_vars = module.args.get('global_vars', {})
                 if module_global_vars:
                     merge(vars, module_global_vars)
-                    #print("    global_vars:", module_global_vars)
+                    print("    global_vars:", module_global_vars, vars)
 
-            #print("    %s:" % context, vars)
+            print("    %s:" % context, vars)
 
             global writer
             sources = []
             objects = []
             for module in modules:
                 module_defines = module.get_defines(context, module_set)
-                #print("MODULE_DEFINES", module_defines)
+                #print("MODULE_DEFINES", module.name, module_defines, module_set)
                 for source in listify(module.args.get("sources", [])):
                     source = module.locate_source(source)
                     rule = Rule.get_by_extension(source)
@@ -463,12 +445,8 @@ class App(Module):
                     # add "-DMODULE_<module_name> for each used/depended module
                     if module_defines:
                         vars = copy.deepcopy(vars)
-                        cflags = vars.get("CFLAGS", [])
-                        if cflags:
-                            cflags.extend(module_defines)
-                        else:
-                            cflags = dep_defines
-                        vars["CFLAGS"] = cflags
+                        cflags = dict_get(vars,"CFLAGS", [])
+                        cflags.extend(module_defines)
 
                     obj = context.get_filepath(source[:-2]+rule.args.get("out"))
                     obj = rule.to_ninja_build(writer, source, obj, vars)
