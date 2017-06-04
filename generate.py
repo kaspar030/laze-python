@@ -127,6 +127,8 @@ class Context(Declaration):
         if add_to_map:
             Context.map[s.name] = s
 
+        s.disabled_modules = set(kwargs.get("disable_modules", []))
+
         #print("CONTEXT", s.name)
 
     def __repr__(s, nest=False):
@@ -146,6 +148,9 @@ class Context(Declaration):
 
     def get_module(s, module_name):
 #        print("get_module()", s, s.modules.keys())
+        if module_name in s.disabled_modules:
+            print("DISABLED_MODULE", s.name, module_name)
+            return None
         module = s.modules.get(module_name)
         if not module and s.parent:
             return s.parent.get_module(module_name)
@@ -305,6 +310,8 @@ class Module(Declaration):
         for module in Module.list:
             context_name = module.args.get("context", "default")
             context = Context.map.get(context_name)
+            if not context:
+                print("laze: error: module %s refers to unknown context %s" % (module.name, context_name))
             module.context = context
             context.modules[module.args.get("name")] = module
             #print("MODULE", module.name, "in", context)
