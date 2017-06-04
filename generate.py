@@ -171,8 +171,11 @@ class Context(Declaration):
         return s.vars
 
     def get_bindir_list(s, _list=None):
+        if s.bindir:
+            return _list + [s.bindir]
+
         _list = _list or []
-        _list += [s.bindir or s.name]
+        _list += [s.name]
 
         if s.parent:
             return s.parent.get_bindir_list(_list)
@@ -403,12 +406,13 @@ class App(Module):
 
     def build(s):
         print("APP", s.name)
-        for name, context in Context.map.items():
-            if context.__class__ != Builder:
+        for name, builder in Context.map.items():
+            if builder.__class__ != Builder:
                 continue
 
             #
-            context = Context(add_to_map=False, name=s.name, parent=context, vars=s.args.get("vars", {}))
+            context = Context(add_to_map=False, name=s.name, parent=builder, vars=s.args.get("vars", {}))
+            context.bindir=(os.path.join(s.name, "bin", builder.name))
             vars = context.get_vars()
 
             print("  build", s.name, "for", name)
