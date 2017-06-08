@@ -15,6 +15,8 @@ from ninja_syntax import Writer
 
 files_set = set()
 
+short_module_defines=True
+
 class InvalidArgument(Exception):
     pass
 
@@ -62,11 +64,27 @@ def yaml_load(filename, path=None, defaults=None):
         else:
             _defaults = data_defaults
 
-        if _defaults:
-            print("yaml_load(): merging defaults, base:    ", data)
-            print("yaml_load(): merging defaults, defaults:", _defaults)
-            merge(data, _defaults, override=False, only_existing=True, join_lists=True)
-            #print("yaml_load(): merging defaults, result:  ", data)
+        def merge_defaults(data, _defaults):
+            if _defaults:
+                #print("yaml_load(): merging defaults, base:    ", data)
+                #print("yaml_load(): merging defaults, defaults:", _defaults)
+                for defaults_key in _defaults.keys():
+                    if not defaults_key in data:
+                        continue
+                    data_val = data.get(defaults_key)
+                    defaults_val = _defaults[defaults_key]
+                    if type(data_val) == list:
+                        for entry in data_val:
+                            merge(entry, copy.deepcopy(defaults_val), join_lists=True)
+                    else:
+                        #print("yaml_load(): merging defaults,", data_val)
+                        if data_val == None:
+                            data_val = {}
+                            data[defaults_key] = data_val
+                        merge(data_val, defaults_val, override=False, join_lists=True)
+                #print("yaml_load(): merging defaults, result:  ", data)
+
+        merge_defaults(data, _defaults)
 
         template = data.pop('template', None)
 
@@ -332,20 +350,29 @@ class Module(Declaration):
         while module_names:
             all_module_names |= module_names
             for module_name in module_names:
-                _notfound_error = notfound_error
                 if module_name == "all":
                     continue
-                if module_name.startswith("?"):
-                    _notfound_error = False
+
+                optional = module_name.startswith("?")
+
+                if optional:
                     module_name = module_name[1:]
-                    all_module_names.add(module_name)
 
                 module = context.get_module(module_name)
                 if not module:
-                    if _notfound_error:
+                    if notfound_error and not optional:
                         raise ModuleNotAvailable(context, s.name, module_name)
                     continue
+
+                if optional:
+                    try:
+                        list(module.get_deps(context))
+                    except ModuleNotAvailable:
+                        continue
+
+                all_module_names.add(module_name)
                 modules.add(module)
+
             new_module_names = set()
             for module in modules:
                 new_module_names |= set(listify(module.args.get(name, [])))
@@ -389,6 +416,8 @@ class Module(Declaration):
 
         dep_defines = []
         for dep_name in sorted(deps_available):
+            if short_module_defines:
+                dep_name = os.path.basename(dep_name)
             dep_defines.append("-DMODULE_" + dep_name.upper().translate(transtab))
         return dep_defines
 
@@ -412,7 +441,10 @@ class App(Module):
 
             #
             context = Context(add_to_map=False, name=s.name, parent=builder, vars=s.args.get("vars", {}))
+
+            #
             context.bindir=(os.path.join(s.name, "bin", builder.name))
+
             vars = context.get_vars()
 
             print("  build", s.name, "for", name)
@@ -446,9 +478,34 @@ class App(Module):
             sources = []
             objects = []
             for module in modules:
-                module_defines = module.get_defines(context, module_set)
+                _sources = listify(module.args.get("sources", []))
+                sources = []
+
+                # handle optional sources ("- optional_module: file.c")
+                use_optional_source_deps = None
+                for source in _sources:
+                    if type(source) == dict:
+                        for key, value in source.items():
+                            # splitting by comma enables multiple deps like "- a,b: file.c"
+                            key = set(key.split(","))
+                            if not key - module_set:
+                                print("OPTIONAL sources:", module.name, value)
+                                sources.extend(listify(value))
+                                if use_optional_source_deps == None:
+                                    use_optional_source_deps = \
+                                            module.args.get("options",{}).get("use_optional_source_deps", False)
+                                if use_optional_source_deps:
+                                    uses = dict_get(module.args, "uses", [])
+                                    print("OPTIONAL USED:", module.name, key)
+                                    uses.extend(list(key))
+                    else:
+                        sources.append(source)
+
+                print("USES", module.name, dict_get(module.args, "uses", []))
                 #print("MODULE_DEFINES", module.name, module_defines, module_set)
-                for source in listify(module.args.get("sources", [])):
+                module_defines = module.get_defines(context, module_set)
+
+                for source in sources:
                     source = module.locate_source(source)
                     rule = Rule.get_by_extension(source)
                     vars = module.get_vars(context)
@@ -465,7 +522,7 @@ class App(Module):
                     #print ( source) #, module.get_vars(context), rule.name)
 
             link = Rule.get_by_name("LINK")
-            outfile = context.get_filepath(s.name)+".elf"
+            outfile = context.get_filepath(os.path.basename(s.name))+".elf"
 
             res = link.to_ninja_build(writer, objects, outfile, context.get_vars())
             if res != outfile:
