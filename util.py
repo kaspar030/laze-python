@@ -111,3 +111,10 @@ def dict_get(_dict, key, default):
         return default
     else:
         return tmp
+
+def static_vars(**kwargs):
+    def decorate(func):
+        for k in kwargs:
+            setattr(func, k, kwargs[k])
+        return func
+    return decorate

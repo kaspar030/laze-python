@@ -9,7 +9,7 @@ import yaml
 
 import click
 
-from util import merge, listify, dict_list_product, uniquify, deep_replace, dict_get
+from util import merge, listify, dict_list_product, uniquify, deep_replace, dict_get, static_vars
 
 from ninja_syntax import Writer
 
@@ -18,6 +18,9 @@ files_set = set()
 short_module_defines=True
 
 class InvalidArgument(Exception):
+    pass
+
+class ParseError(Exception):
     pass
 
 class ModuleNotAvailable(Exception):
@@ -29,7 +32,7 @@ class ModuleNotAvailable(Exception):
     def __str__(s):
         return "%s in %s depends on unavailable module \"%s\"" % (s.module, s.context, s.dependency)
 
-def yaml_load(filename, path=None, defaults=None):
+def yaml_load(filename, path=None, defaults=None, parent=None):
     path = path or ""
 
     #print("yaml_load(): loading %s with relpath %s" % (filename, path))
@@ -39,18 +42,22 @@ def yaml_load(filename, path=None, defaults=None):
     def do_include(data):
         includes = listify(data.get("include"))
         for include in includes:
-            _data = yaml_load(os.path.join(os.path.dirname(filename), include), path)[0]
+            _data = yaml_load(os.path.join(os.path.dirname(filename), include), path, parent=filename)[0] or {}
             _data.pop("ignore", None)
             if "template" in _data:
-                raise InvalidJSONException("template statement in included file currently not supported!")
-            merge_override(_data, data)
+                raise ParseError("template statement in included file currently not supported!")
+            merge(_data, data, override=True)
             data = _data
 
         data.pop("include", None)
         return data
 
-    with open(filename, 'r') as f:
-        datas = yaml.load_all(f.read())
+    try:
+        with open(filename, 'r') as f:
+            datas = yaml.load_all(f.read())
+    except FileNotFoundError as e:
+        msg = "laze: error: cannot find %s%s" % (filename, " (included by %s)" % parent if parent else "")
+        raise ParseError(msg) from e
 
     res = []
     for data in datas:
@@ -110,7 +117,8 @@ def yaml_load(filename, path=None, defaults=None):
                 relpath = os.path.join(path, subdir)
                 res.extend(yaml_load(os.path.join(relpath, "build.yml"),
                     path=relpath,
-                    defaults=_defaults))
+                    defaults=_defaults,
+                    parent=filename))
 
     return res
 
@@ -163,6 +171,7 @@ class Context(Declaration):
             if context.parent:
                 context.parent = Context.map[context.parent]
                 context.parent.children.append(context)
+                depends(context.parent.name, name)
 
     def get_module(s, module_name):
 #        print("get_module()", s, s.modules.keys())
@@ -284,6 +293,10 @@ class Rule(Declaration):
             #print("laze: %s %s ->  %s" % (s.name, _in, _out), vars)
             writer.build(outputs=_out, rule=s.name, inputs=_in, variables=vars)
             return _out
+
+@static_vars(map={})
+def depends(name, deps):
+    dict_get(depends.map, name, set()).update(listify(deps))
 
 def list_remove(_list):
     if _list:
@@ -529,6 +542,8 @@ class App(Module):
                 symlink = Rule.get_by_name("SYMLINK")
                 symlink.to_ninja_build(writer, res, outfile)
 
+            depends(context.parent.name, outfile)
+            depends(s.name, outfile)
 #            print("")
 
 class_map = {
@@ -544,7 +559,11 @@ class_map = {
 def generate(buildfile):
     global writer
     before = time.time()
-    data_list = yaml_load(buildfile)
+    try:
+        data_list = yaml_load(buildfile, parent=buildfile)
+    except ParseError as e:
+        print(e)
+        sys.exit(1)
 
     print("laze: loading buildfiles took %.2fs" % (time.time()-before))
 
@@ -581,3 +600,7 @@ def generate(buildfile):
     print("laze: building %s applications" % App.count)
     if Rule.rule_num:
         print("laze: cached: %s/%s (%.2f%%)" % (Rule.rule_cached, Rule.rule_num, Rule.rule_cached*100/Rule.rule_num))
+
+    for dep, _set in depends.map.items():
+        writer.build(rule="phony", outputs=dep, inputs=list(_set))
+
