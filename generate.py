@@ -212,6 +212,14 @@ class Context(Declaration):
     def get_filepath(s, filename):
         return os.path.join(*reversed(s.get_bindir_list([filename])))
 
+    def listed(s, _set):
+        if s.name in _set:
+            return True
+        elif s.parent:
+            return s.parent.listed(_set)
+        else:
+            return False
+
 class Builder(Context):
     pass
 
@@ -440,6 +448,19 @@ class App(Module):
     def __init__(s, **kwargs):
         super().__init__(**kwargs)
         s.__class__.list.append(s)
+
+        whitelist = s.args.get("whitelist",[])
+        if whitelist:
+            s.whitelist = set(listify(whitelist))
+        else:
+            s.whitelist = None
+
+        blacklist = s.args.get("blacklist",[])
+        if blacklist:
+            s.blacklist = set(listify(blacklist))
+        else:
+            s.blacklist = None
+
         #print("APP_", s.name, "path:", s.relpath)
 
     def post_parse():
@@ -450,6 +471,14 @@ class App(Module):
         print("APP", s.name)
         for name, builder in Context.map.items():
             if builder.__class__ != Builder:
+                continue
+
+            if s.whitelist and not builder.listed(s.whitelist):
+                print("NOT WHITELISTED:", s.name, builder.name)
+                continue
+
+            if s.blacklist and builder.listed(s.blacklist):
+                print("BLACKLISTED:", s.name, builder.name)
                 continue
 
             #
