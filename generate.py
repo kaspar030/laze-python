@@ -113,7 +113,7 @@ def yaml_load(filename, path=None, defaults=None, parent=None):
             data = do_include(data)
             data["_relpath"] = path
             res.append(data)
-            for subdir in listify(data.get("subdir", [])):
+            for subdir in listify(data.get("subdirs", [])):
                 relpath = os.path.join(path, subdir)
                 res.extend(yaml_load(os.path.join(relpath, "build.yml"),
                     path=relpath,
@@ -274,16 +274,32 @@ class Rule(Declaration):
     def to_ninja(s, writer):
         writer.rule(s.name, s.cmd, description="%s ${out}" % s.name, deps=s.deps, depfile=s.depfile)
 
+    def process_var_options(s, name, data):
+        opts = s.args["var_options"][name]
+
+        joiner = opts.get("joiner", " ")
+        prefix = opts.get("prefix", "")
+        suffix = opts.get("suffix", "")
+        start = opts.get("start", "")
+        end = opts.get("end", "")
+
+        return start + \
+                joiner.join([prefix + entry + suffix for entry in listify(data)]) \
+                + end
+
     def to_ninja_build(s, writer, _in, _out, _vars=None):
         _vars = _vars or {}
         #print("RULE", s.name, _in, _out, _vars)
         vars = {}
         for name in s.var_list:
             try:
-                tmp = _vars[name]
-                if type(tmp) == list:
-                    tmp = " ".join(tmp)
-                vars[name] = tmp
+                data = _vars[name]
+                try:
+                    data = s.process_var_options(name, data)
+                except KeyError:
+                    if type(data) == list:
+                        data = " ".join(data)
+                vars[name] = data
             except KeyError:
                 pass
 
