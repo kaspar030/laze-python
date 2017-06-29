@@ -118,3 +118,12 @@ def static_vars(**kwargs):
             setattr(func, k, kwargs[k])
         return func
     return decorate
+
+def split(_list, splitter=','):
+    tmp = []
+    for entry in _list:
+        tmp.extend(entry.split(splitter))
+    _list.clear()
+    _list.extend(tmp)
+
+    return _list

@@ -9,7 +9,7 @@ import yaml
 
 import click
 
-from util import merge, listify, dict_list_product, uniquify, deep_replace, dict_get, static_vars
+from util import merge, listify, dict_list_product, uniquify, deep_replace, dict_get, static_vars, split
 
 from ninja_syntax import Writer
 
@@ -155,6 +155,7 @@ class Context(Declaration):
 
         s.disabled_modules = set(kwargs.get("disable_modules", []))
 
+        depends(s.name)
         #print("CONTEXT", s.name)
 
     def __repr__(s, nest=False):
@@ -319,7 +320,7 @@ class Rule(Declaration):
             return _out
 
 @static_vars(map={})
-def depends(name, deps):
+def depends(name, deps=None):
     dict_get(depends.map, name, set()).update(listify(deps))
 
 def list_remove(_list):
@@ -373,6 +374,11 @@ class Module(Declaration):
             module.context = context
             context.modules[module.args.get("name")] = module
             #print("MODULE", module.name, "in", context)
+            module.download(module.args.get("download"))
+
+    def download(s, download):
+        if download:
+            print("DOWNLOAD", s.name, download)
 
     def get_nested(s, context, name, notfound_error=True):
         try:
@@ -399,6 +405,7 @@ class Module(Declaration):
                 if not module:
                     if notfound_error and not optional:
                         raise ModuleNotAvailable(context, s.name, module_name)
+                    print("NOTFOUND", context, module_name)
                     continue
 
                 if optional:
@@ -461,21 +468,18 @@ class Module(Declaration):
 class App(Module):
     count = 0
     list = []
+    global_applist=set()
+    global_whitelist=set()
+    global_blacklist=set()
     def __init__(s, **kwargs):
         super().__init__(**kwargs)
         s.__class__.list.append(s)
 
-        whitelist = s.args.get("whitelist",[])
-        if whitelist:
-            s.whitelist = set(listify(whitelist))
-        else:
-            s.whitelist = None
+        def _list(s, name):
+            return set(listify(s.args.get(name, []))) | App.__dict__["global_" + name] or None
 
-        blacklist = s.args.get("blacklist",[])
-        if blacklist:
-            s.blacklist = set(listify(blacklist))
-        else:
-            s.blacklist = None
+        s.whitelist = _list(s, "whitelist")
+        s.blacklist = _list(s, "blacklist")
 
         #print("APP_", s.name, "path:", s.relpath)
 
@@ -484,7 +488,11 @@ class App(Module):
             app.build()
 
     def build(s):
+        if not s.name in App.global_applist:
+            return
+
         print("APP", s.name)
+
         for name, builder in Context.map.items():
             if builder.__class__ != Builder:
                 continue
@@ -601,8 +609,15 @@ class_map = {
 
 @click.command()
 @click.argument('buildfile')
-def generate(buildfile):
+@click.option('--whitelist', multiple=True, envvar='LAZE_WHITELIST')
+@click.option('--apps', multiple=True, envvar='LAZE_APPS')
+def generate(buildfile, whitelist, apps):
     global writer
+
+    App.global_whitelist = set(split(list(whitelist)))
+    App.global_blacklist = set() # set(split(list(blacklist or [])))
+    App.global_applist = set(split(list(apps)))
+
     before = time.time()
     try:
         data_list = yaml_load(buildfile, parent=buildfile)
