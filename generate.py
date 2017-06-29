@@ -488,7 +488,7 @@ class App(Module):
             app.build()
 
     def build(s):
-        if not s.name in App.global_applist:
+        if App.global_applist and not s.name in App.global_applist:
             return
 
         print("APP", s.name)
