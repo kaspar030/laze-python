@@ -315,7 +315,7 @@ class Rule(Declaration):
 
         except KeyError:
             Rule.rule_cache[cache_key] = _out
-            #print("laze: %s %s ->  %s" % (s.name, _in, _out), vars)
+            #print("laze: NOCACHE: %s %s ->  %s" % (s.name, _in, _out), vars)
             writer.build(outputs=_out, rule=s.name, inputs=_in, variables=vars)
             return _out
 
@@ -364,6 +364,7 @@ class Module(Declaration):
 
         s.context = None
         s.get_nested_cache = {}
+        s.export_vars = {}
 
     def post_parse():
         for module in Module.list:
@@ -432,15 +433,17 @@ class Module(Declaration):
         return res
 
     def get_deps(s, context):
-        for dep in s.get_nested(context, "depends"):
-            yield dep
+        return uniquify(s.get_nested(context, "depends"))
 
-    def get_used(s, context):
-        for used in s.get_nested(context, "uses", notfound_error=False):
-            yield used
+    def get_used(s, context, all=False):
+        res = []
+        res.extend(s.get_nested(context, "uses", notfound_error=False))
+
         for dep in s.get_nested(context, "depends", notfound_error=False):
-            for used in dep.get_nested(context, "uses", notfound_error=False):
-                yield used
+            res.extend(dep.get_nested(context, "uses", notfound_error=False))
+            if all:
+                res.append(dep)
+        return uniquify(res)
 
     def get_vars(s, context):
         vars = s.args.get("vars", {})
@@ -449,10 +452,27 @@ class Module(Declaration):
             merge(_vars, vars, override=True)
             return _vars
         else:
-            return context.get_vars()
+            return copy.deepcopy(context.get_vars())
+
+    def get_export_vars(s, context, module_set):
+        try:
+            return s.export_vars[context]
+        except KeyError:
+            pass
+        vars = s.args.get("export_vars", {})
+
+        for dep in s.get_used(context, all=True):
+            if dep.name in module_set:
+                merge(vars, dep.args.get("export_vars", {}))
+
+        s.export_vars[context] = vars
+        return vars
+
+    def uses_all(s):
+        return "all" in listify(s.args.get("uses", []))
 
     def get_defines(s, context, module_set):
-        if "all" in listify(s.args.get("uses", [])):
+        if s.uses_all():
             deps_available = module_set
         else:
             dep_names = set([ x.name for x in s.get_used(context)])
@@ -571,16 +591,19 @@ class App(Module):
                 #print("MODULE_DEFINES", module.name, module_defines, module_set)
                 module_defines = module.get_defines(context, module_set)
 
+                vars = module.get_vars(context)
+                #print("EXPORT VARS", module.name, module.get_export_vars(context, module_set))
+                merge(vars, copy.deepcopy(module.get_export_vars(context, module_set)))
+
+                # add "-DMODULE_<module_name> for each used/depended module
+                if module_defines:
+                    vars = copy.deepcopy(vars)
+                    cflags = dict_get(vars,"CFLAGS", [])
+                    cflags.extend(module_defines)
+
                 for source in sources:
                     source = module.locate_source(source)
                     rule = Rule.get_by_extension(source)
-                    vars = module.get_vars(context)
-
-                    # add "-DMODULE_<module_name> for each used/depended module
-                    if module_defines:
-                        vars = copy.deepcopy(vars)
-                        cflags = dict_get(vars,"CFLAGS", [])
-                        cflags.extend(module_defines)
 
                     obj = context.get_filepath(source[:-2]+rule.args.get("out"))
                     obj = rule.to_ninja_build(writer, source, obj, vars)
