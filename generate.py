@@ -136,7 +136,7 @@ class Declaration(object):
         pass
 
     def locate_source(s, filename):
-        return "${root}" + os.path.join(s.relpath, filename)
+        return os.path.join(s.relpath, filename)
 
 class Context(Declaration):
     map = {}
@@ -150,6 +150,7 @@ class Context(Declaration):
         s.vars = None
         s.bindir = s.args.get("bindir")
 
+        print(s.name)
         if add_to_map:
             Context.map[s.name] = s
 
@@ -656,9 +657,9 @@ def generate(buildfile, whitelist, apps):
     # create rule for automatically re-running laze if necessary
     files_list = []
     for filename in files_set:
-        files_list.append("${root}" + filename)
+        files_list.append(filename)
     writer.rule("relaze", "laze generate ${in}", restat=True, generator=True)
-    writer.build(rule="relaze", outputs="${root}build.ninja", implicit=files_list, inputs="${root}"+buildfile)
+    writer.build(rule="relaze", outputs="build.ninja", implicit=files_list, inputs=buildfile)
 
     before = time.time()
     # PARSING PHASE
