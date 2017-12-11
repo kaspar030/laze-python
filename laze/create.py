@@ -1,7 +1,7 @@
 import glob, os, sys
 
 import click
-from util import uniquify, split
+from .util import uniquify, split
 
 @click.command()
 @click.option('_type', '--type', type=click.Choice(['app', 'module', 'subdir']), default='app')

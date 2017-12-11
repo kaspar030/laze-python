@@ -9,7 +9,7 @@ import yaml
 
 import click
 
-from util import merge, listify, dict_list_product, uniquify, deep_replace, dict_get, static_vars, split
+from .util import merge, listify, dict_list_product, uniquify, deep_replace, dict_get, static_vars, split
 
 from ninja_syntax import Writer
 
