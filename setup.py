@@ -5,24 +5,28 @@ from setuptools import setup
 from codecs import open
 from os import path
 
-here = path.abspath(path.dirname(__file__))
+PACKAGE = 'laze'
 
-# Get the long description from the README file
-with open(path.join(here, 'README.md'), encoding='utf-8') as f:
-    long_description = f.read()
 
-# Get the version from file
-with open(path.join(here, 'laze/version.py'), encoding='utf-8') as f:
-    _version = f.read()
+def get_long_description():
+    # Get the long description from the README file
+    with open('README.md', encoding='utf-8') as f:
+        return f.read()
 
-version = _version.split("=")[1].lstrip().rstrip().lstrip('"').rstrip('"')
+
+def get_version():
+    """Get the version from package __init__.py file."""
+    with open(path.join(PACKAGE, '__init__.py'), encoding='utf-8') as f:
+        for line in f:
+            if line.startswith('__version__'):
+                return eval(line.split('=')[-1])
 
 setup(
-    name='laze',
-    version=version,
+    name=PACKAGE,
+    version=get_version(),
 
     description='laze: a ninja buildfile generator',
-    long_description=long_description,
+    long_description=get_long_description(),
 
     url='https://github.com/kaspar030/laze',
 
@@ -44,13 +48,13 @@ setup(
 
         'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',
 
-        'Programming Language :: Python :: 3.3',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
     ],
 
     keywords='build tool',
-    packages=['laze'],
+    packages=[PACKAGE],
     install_requires=['click', 'pyyaml', 'ninja_syntax'],
     entry_points={
         'console_scripts': [
