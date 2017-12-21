@@ -5,12 +5,18 @@ Welcome to laze, a ninja build file generator.
 # Requirements
 
 - python3
-- click
-- pyyaml
 - ninja
 
-    $ "pip3 install --user click pyyaml"
     $ sudo apt-get install ninja
+    $ pip3 install --user .
+
+# Usage
+
+    $ cd example
+    $ laze generate build.yml
+    $ ninja
+    $ ./hello/bin/host/hello.elf
+    Hello World!
 
 # License
 
