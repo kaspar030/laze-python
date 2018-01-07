@@ -15,12 +15,12 @@ Aspires to be the next goto-alternative to make.
 
 # Getting started
 
-Laze is very early in its development, thus getting started currently is way
-more complicated (and verbose) than necesary.
+Laze is very early in its development, thus getting started is currently way
+more complicated (and verbose) than necessary.
 
 Anyhow, there's an example project in the examples folder.
-After installing laze, you can check out this repository, then build the example
-project with these commands:
+After installing laze (e.g., using pip) and checking out this repository, you
+can build the example project with these commands:
 
     $ cd example
     $ laze generate build.yml
