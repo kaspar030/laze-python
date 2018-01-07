@@ -1,7 +1,10 @@
-import glob, os, sys
+import glob
+import os
+import sys
 
 import click
 from .util import uniquify, split
+
 
 @click.command()
 @click.option('_type', '--type', type=click.Choice(['app', 'module', 'subdir']), default='app')
@@ -19,7 +22,7 @@ def create(_type, name, context, depends, uses, sources, auto_sources):
     with open('build.yml', 'w') as f:
         print("%s:" % _type, file=f)
 
-        if _type=='subdir':
+        if _type == 'subdir':
             for dirname in glob.glob('*/'):
                 print("        - %s" % dirname.rstrip("/"), file=f)
             return

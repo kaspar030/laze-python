@@ -15,13 +15,16 @@ from ninja_syntax import Writer
 
 files_set = set()
 
-short_module_defines=True
+short_module_defines = True
+
 
 class InvalidArgument(Exception):
     pass
 
+
 class ParseError(Exception):
     pass
+
 
 class ModuleNotAvailable(Exception):
     def __init__(s, context, module, dependency):
@@ -31,6 +34,7 @@ class ModuleNotAvailable(Exception):
 
     def __str__(s):
         return "%s in %s depends on unavailable module \"%s\"" % (s.module, s.context, s.dependency)
+
 
 def yaml_load(filename, path=None, defaults=None, parent=None):
     path = path or ""
@@ -42,10 +46,12 @@ def yaml_load(filename, path=None, defaults=None, parent=None):
     def do_include(data):
         includes = listify(data.get("include"))
         for include in includes:
-            _data = yaml_load(os.path.join(os.path.dirname(filename), include), path, parent=filename)[0] or {}
+            _data = yaml_load(os.path.join(os.path.dirname(
+                filename), include), path, parent=filename)[0] or {}
             _data.pop("ignore", None)
             if "template" in _data:
-                raise ParseError("template statement in included file currently not supported!")
+                raise ParseError(
+                    "template statement in included file currently not supported!")
             merge(_data, data, override=True)
             data = _data
 
@@ -56,7 +62,8 @@ def yaml_load(filename, path=None, defaults=None, parent=None):
         with open(filename, 'r') as f:
             datas = yaml.load_all(f.read())
     except FileNotFoundError as e:
-        msg = "laze: error: cannot find %s%s" % (filename, " (included by %s)" % parent if parent else "")
+        msg = "laze: error: cannot find %s%s" % (
+            filename, " (included by %s)" % parent if parent else "")
         raise ParseError(msg) from e
 
     res = []
@@ -82,13 +89,15 @@ def yaml_load(filename, path=None, defaults=None, parent=None):
                     defaults_val = _defaults[defaults_key]
                     if type(data_val) == list:
                         for entry in data_val:
-                            merge(entry, copy.deepcopy(defaults_val), join_lists=True)
+                            merge(entry, copy.deepcopy(
+                                defaults_val), join_lists=True)
                     else:
                         #print("yaml_load(): merging defaults,", data_val)
                         if data_val == None:
                             data_val = {}
                             data[defaults_key] = data_val
-                        merge(data_val, defaults_val, override=False, join_lists=True)
+                        merge(data_val, defaults_val,
+                              override=False, join_lists=True)
                 #print("yaml_load(): merging defaults, result:  ", data)
 
         merge_defaults(data, _defaults)
@@ -116,11 +125,12 @@ def yaml_load(filename, path=None, defaults=None, parent=None):
             for subdir in listify(data.get("subdirs", [])):
                 relpath = os.path.join(path, subdir)
                 res.extend(yaml_load(os.path.join(relpath, "build.yml"),
-                    path=relpath,
-                    defaults=_defaults,
-                    parent=filename))
+                                     path=relpath,
+                                     defaults=_defaults,
+                                     parent=filename))
 
     return res
+
 
 class Declaration(object):
     def __init__(s, **kwargs):
@@ -138,8 +148,10 @@ class Declaration(object):
     def locate_source(s, filename):
         return os.path.join(s.relpath, filename)
 
+
 class Context(Declaration):
     map = {}
+
     def __init__(s, add_to_map=True, **kwargs):
         super().__init__(**kwargs)
 
@@ -176,7 +188,7 @@ class Context(Declaration):
                 depends(context.parent.name, name)
 
     def get_module(s, module_name):
-#        print("get_module()", s, s.modules.keys())
+        #        print("get_module()", s, s.modules.keys())
         if module_name in s.disabled_modules:
             print("DISABLED_MODULE", s.name, module_name)
             return None
@@ -191,8 +203,10 @@ class Context(Declaration):
         elif s.parent:
             _vars = {}
             pvars = s.parent.get_vars()
-            merge(_vars, copy.deepcopy(pvars), override=True, change_listorder=False)
-            merge(_vars, s.args.get("vars", {}), override=True, change_listorder=False)
+            merge(_vars, copy.deepcopy(pvars),
+                  override=True, change_listorder=False)
+            merge(_vars, s.args.get("vars", {}),
+                  override=True, change_listorder=False)
             s.vars = _vars
         else:
             s.vars = s.args.get("vars", {})
@@ -222,10 +236,13 @@ class Context(Declaration):
         else:
             return False
 
+
 class Builder(Context):
     pass
 
+
 rule_var_re = re.compile(r'\${\w+}')
+
 
 class Rule(Declaration):
     rule_num = 0
@@ -260,6 +277,7 @@ class Rule(Declaration):
     def get_by_extension(filename):
         filename, file_extension = os.path.splitext(filename)
         return Rule.rule_map[file_extension]
+
     def get_by_name(name):
         return Rule.rule_name_map[name]
 
@@ -268,13 +286,14 @@ class Rule(Declaration):
         var_names = []
         for name in _var_names:
             name = name[2:-1]
-            if not name in { 'in', 'out' }:
+            if not name in {'in', 'out'}:
                 var_names.append(name)
         #print("RULE", s.name, "vars:", var_names)
         s.var_list = var_names
 
     def to_ninja(s, writer):
-        writer.rule(s.name, s.cmd, description="%s ${out}" % s.name, deps=s.deps, depfile=s.depfile)
+        writer.rule(
+            s.name, s.cmd, description="%s ${out}" % s.name, deps=s.deps, depfile=s.depfile)
 
     def process_var_options(s, name, data):
         opts = s.args["var_options"][name]
@@ -286,8 +305,8 @@ class Rule(Declaration):
         end = opts.get("end", "")
 
         return start + \
-                joiner.join([prefix + entry + suffix for entry in listify(data)]) \
-                + end
+            joiner.join([prefix + entry + suffix for entry in listify(data)]) \
+            + end
 
     def to_ninja_build(s, writer, _in, _out, _vars=None):
         _vars = _vars or {}
@@ -305,7 +324,8 @@ class Rule(Declaration):
             except KeyError:
                 pass
 
-        cache_key = hash("rule:%s in:%s vars:%s" % (s.name, _in, hash(frozenset(vars.items()))))
+        cache_key = hash("rule:%s in:%s vars:%s" %
+                         (s.name, _in, hash(frozenset(vars.items()))))
 
         Rule.rule_num += 1
         try:
@@ -320,9 +340,11 @@ class Rule(Declaration):
             writer.build(outputs=_out, rule=s.name, inputs=_in, variables=vars)
             return _out
 
+
 @static_vars(map={})
 def depends(name, deps=None):
     dict_get(depends.map, name, set()).update(listify(deps))
+
 
 def list_remove(_list):
     if _list:
@@ -337,13 +359,16 @@ def list_remove(_list):
             for entry in _set & remove:
                 _list.remove(entry)
 
+
 _in = "/-"
 _out = "__"
 
 transtab = str.maketrans(_in, _out)
 
+
 class Module(Declaration):
     list = []
+
     def __init__(s, **kwargs):
         super().__init__(**kwargs)
         Module.list.append(s)
@@ -372,7 +397,8 @@ class Module(Declaration):
             context_name = module.args.get("context", "default")
             context = Context.map.get(context_name)
             if not context:
-                print("laze: error: module %s refers to unknown context %s" % (module.name, context_name))
+                print("laze: error: module %s refers to unknown context %s" %
+                      (module.name, context_name))
             module.context = context
             context.modules[module.args.get("name")] = module
             #print("MODULE", module.name, "in", context)
@@ -425,11 +451,11 @@ class Module(Declaration):
 
             module_names = new_module_names - all_module_names
 
-        res = sorted(list(modules), key=lambda x:x.name)
+        res = sorted(list(modules), key=lambda x: x.name)
 
         #print("get_nested(%s) setting cache" % name, { s.name : [x.name for x in res] })
         tmp = dict_get(s.get_nested_cache, context, {})
-        merge(tmp, { name : {s: res }})
+        merge(tmp, {name: {s: res}})
 
         return res
 
@@ -476,22 +502,25 @@ class Module(Declaration):
         if s.uses_all():
             deps_available = module_set
         else:
-            dep_names = set([ x.name for x in s.get_used(context)])
+            dep_names = set([x.name for x in s.get_used(context)])
             deps_available = dep_names & module_set
 
         dep_defines = []
         for dep_name in sorted(deps_available):
             if short_module_defines:
                 dep_name = os.path.basename(dep_name)
-            dep_defines.append("-DMODULE_" + dep_name.upper().translate(transtab))
+            dep_defines.append(
+                "-DMODULE_" + dep_name.upper().translate(transtab))
         return dep_defines
+
 
 class App(Module):
     count = 0
     list = []
-    global_applist=set()
-    global_whitelist=set()
-    global_blacklist=set()
+    global_applist = set()
+    global_whitelist = set()
+    global_blacklist = set()
+
     def __init__(s, **kwargs):
         super().__init__(**kwargs)
         s.__class__.list.append(s)
@@ -527,10 +556,11 @@ class App(Module):
                 continue
 
             #
-            context = Context(add_to_map=False, name=s.name, parent=builder, vars=s.args.get("vars", {}))
+            context = Context(add_to_map=False, name=s.name,
+                              parent=builder, vars=s.args.get("vars", {}))
 
             #
-            context.bindir=(os.path.join(s.name, "bin", builder.name))
+            context.bindir = (os.path.join(s.name, "bin", builder.name))
 
             vars = context.get_vars()
 
@@ -538,7 +568,8 @@ class App(Module):
             try:
                 modules = [s] + uniquify(s.get_deps(context))
             except ModuleNotAvailable as e:
-                print("laze: WARNING: skipping app", s.name, "for builder %s:" % context.parent.name, e)
+                print("laze: WARNING: skipping app", s.name,
+                      "for builder %s:" % context.parent.name, e)
                 continue
 
             App.count += 1
@@ -580,7 +611,8 @@ class App(Module):
                                 sources.extend(listify(value))
                                 if use_optional_source_deps == None:
                                     use_optional_source_deps = \
-                                            module.args.get("options",{}).get("use_optional_source_deps", False)
+                                        module.args.get("options", {}).get(
+                                            "use_optional_source_deps", False)
                                 if use_optional_source_deps:
                                     uses = dict_get(module.args, "uses", [])
                                     print("OPTIONAL USED:", module.name, key)
@@ -594,27 +626,30 @@ class App(Module):
 
                 vars = module.get_vars(context)
                 #print("EXPORT VARS", module.name, module.get_export_vars(context, module_set))
-                merge(vars, copy.deepcopy(module.get_export_vars(context, module_set)))
+                merge(vars, copy.deepcopy(
+                    module.get_export_vars(context, module_set)))
 
                 # add "-DMODULE_<module_name> for each used/depended module
                 if module_defines:
                     vars = copy.deepcopy(vars)
-                    cflags = dict_get(vars,"CFLAGS", [])
+                    cflags = dict_get(vars, "CFLAGS", [])
                     cflags.extend(module_defines)
 
                 for source in sources:
                     source = module.locate_source(source)
                     rule = Rule.get_by_extension(source)
 
-                    obj = context.get_filepath(source[:-2]+rule.args.get("out"))
+                    obj = context.get_filepath(
+                        source[:-2] + rule.args.get("out"))
                     obj = rule.to_ninja_build(writer, source, obj, vars)
                     objects.append(obj)
-                    #print ( source) #, module.get_vars(context), rule.name)
+                    # print ( source) #, module.get_vars(context), rule.name)
 
             link = Rule.get_by_name("LINK")
-            outfile = context.get_filepath(os.path.basename(s.name))+".elf"
+            outfile = context.get_filepath(os.path.basename(s.name)) + ".elf"
 
-            res = link.to_ninja_build(writer, objects, outfile, context.get_vars())
+            res = link.to_ninja_build(
+                writer, objects, outfile, context.get_vars())
             if res != outfile:
                 symlink = Rule.get_by_name("SYMLINK")
                 symlink.to_ninja_build(writer, res, outfile)
@@ -623,13 +658,15 @@ class App(Module):
             depends(s.name, outfile)
 #            print("")
 
+
 class_map = {
-        "context" : Context,
-        "builder" : Builder,
-        "rule" : Rule,
-        "module" : Module,
-        "app" : App,
-        }
+    "context": Context,
+    "builder": Builder,
+    "rule": Rule,
+    "module": Module,
+    "app": App,
+}
+
 
 @click.command()
 @click.argument('buildfile')
@@ -639,7 +676,7 @@ def generate(buildfile, whitelist, apps):
     global writer
 
     App.global_whitelist = set(split(list(whitelist)))
-    App.global_blacklist = set() # set(split(list(blacklist or [])))
+    App.global_blacklist = set()  # set(split(list(blacklist or [])))
     App.global_applist = set(split(list(apps)))
 
     before = time.time()
@@ -649,7 +686,7 @@ def generate(buildfile, whitelist, apps):
         print(e)
         sys.exit(1)
 
-    print("laze: loading buildfiles took %.2fs" % (time.time()-before))
+    print("laze: loading buildfiles took %.2fs" % (time.time() - before))
 
     writer = Writer(open("build.ninja", "w"))
     #
@@ -659,7 +696,8 @@ def generate(buildfile, whitelist, apps):
     for filename in files_set:
         files_list.append(filename)
     writer.rule("relaze", "laze generate ${in}", restat=True, generator=True)
-    writer.build(rule="relaze", outputs="build.ninja", implicit=files_list, inputs=buildfile)
+    writer.build(rule="relaze", outputs="build.ninja",
+                 implicit=files_list, inputs=buildfile)
 
     before = time.time()
     # PARSING PHASE
@@ -672,7 +710,7 @@ def generate(buildfile, whitelist, apps):
                 _data["_relpath"] = relpath
                 _class(**_data)
 
-    no_post_parse_classes = { Builder }
+    no_post_parse_classes = {Builder}
 
     # POST_PARSING PHASE
     for name, _class in class_map.items():
@@ -680,11 +718,11 @@ def generate(buildfile, whitelist, apps):
             continue
         _class.post_parse()
 
-    print("laze: processing buildfiles took %.2fs" % (time.time()-before))
+    print("laze: processing buildfiles took %.2fs" % (time.time() - before))
     print("laze: building %s applications" % App.count)
     if Rule.rule_num:
-        print("laze: cached: %s/%s (%.2f%%)" % (Rule.rule_cached, Rule.rule_num, Rule.rule_cached*100/Rule.rule_num))
+        print("laze: cached: %s/%s (%.2f%%)" % (Rule.rule_cached,
+                                                Rule.rule_num, Rule.rule_cached * 100 / Rule.rule_num))
 
     for dep, _set in depends.map.items():
         writer.build(rule="phony", outputs=dep, inputs=list(_set))
-

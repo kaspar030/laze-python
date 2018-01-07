@@ -1,30 +1,36 @@
 import traceback
 from itertools import product
 
+
 def listify(something):
     if not something:
         return []
-    if not type(something)==list:
+    if not type(something) == list:
         return [something]
     return something
+
 
 def uniquify(seq):
     # Order preserving
     seen = set()
     return [x for x in seq if x not in seen and not seen.add(x)]
 
+
 def print_exception():
     traceback.print_exc()
+
 
 def dict_list_tuples2(_dict):
     for key, value_list in _dict.items():
         for value in value_list:
-            yield (key,value)
+            yield (key, value)
+
 
 def dict_list_tuples(_dict):
     _dict = _dict or {}
     for key in _dict.keys():
-        yield dict_list_tuples2({key:_dict[key]})
+        yield dict_list_tuples2({key: _dict[key]})
+
 
 def dict_list_product(_dict):
     for _tuple in product(*dict_list_tuples(_dict)):
@@ -34,6 +40,7 @@ def dict_list_product(_dict):
 
         yield(res)
 
+
 def deep_replace(obj, replace):
     if type(obj) == list:
         _obj = []
@@ -52,9 +59,11 @@ def deep_replace(obj, replace):
     else:
         return obj
 
+
 def merge(a, b, path=None, override=False, change_listorder=False, only_existing=False, join_lists=False):
     "merges b into a"
-    if path is None: path = []
+    if path is None:
+        path = []
     for key in b:
         if key in a:
             if join_lists:
@@ -64,7 +73,8 @@ def merge(a, b, path=None, override=False, change_listorder=False, only_existing
                     a[key] = [a[key]]
 
             if isinstance(a[key], dict) and isinstance(b[key], dict):
-                merge(a[key], b[key], path=path + [str(key)], override=override, join_lists=join_lists)
+                merge(a[key], b[key], path=path + [str(key)],
+                      override=override, join_lists=join_lists)
             elif isinstance(a[key], set) and isinstance(b[key], set):
                 a[key] = a[key] | b[key]
             elif isinstance(a[key], list) and isinstance(b[key], list):
@@ -73,18 +83,20 @@ def merge(a, b, path=None, override=False, change_listorder=False, only_existing
                 else:
                     a[key] = uniquify(a[key] + b[key])
             elif a[key] == b[key]:
-                pass # same leaf value
+                pass  # same leaf value
             elif a[key] == None:
                 a[key] = b[key]
             else:
                 if override:
                     a[key] = b[key]
                 else:
-                    raise Exception('Conflict at %s (%s, %s)' % ('.'.join(path + [str(key)]), a[key], b[key]))
+                    raise Exception('Conflict at %s (%s, %s)' % (
+                        '.'.join(path + [str(key)]), a[key], b[key]))
         else:
             if not only_existing:
                 a[key] = b[key]
     return a
+
 
 def deep_replace(obj, replace):
     if type(obj) == list:
@@ -104,6 +116,7 @@ def deep_replace(obj, replace):
     else:
         return obj
 
+
 def dict_get(_dict, key, default):
     tmp = _dict.get(key)
     if not tmp:
@@ -112,12 +125,14 @@ def dict_get(_dict, key, default):
     else:
         return tmp
 
+
 def static_vars(**kwargs):
     def decorate(func):
         for k in kwargs:
             setattr(func, k, kwargs[k])
         return func
     return decorate
+
 
 def split(_list, splitter=','):
     tmp = []
