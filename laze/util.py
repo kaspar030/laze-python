@@ -60,7 +60,8 @@ def deep_replace(obj, replace):
         return obj
 
 
-def merge(a, b, path=None, override=False, change_listorder=False, only_existing=False, join_lists=False):
+def merge(a, b, path=None, override=False, change_listorder=False,
+          only_existing=False, join_lists=False):
     "merges b into a"
     if path is None:
         path = []
@@ -84,7 +85,7 @@ def merge(a, b, path=None, override=False, change_listorder=False, only_existing
                     a[key] = uniquify(a[key] + b[key])
             elif a[key] == b[key]:
                 pass  # same leaf value
-            elif a[key] == None:
+            elif a[key] is None:
                 a[key] = b[key]
             else:
                 if override:
@@ -96,25 +97,6 @@ def merge(a, b, path=None, override=False, change_listorder=False, only_existing
             if not only_existing:
                 a[key] = b[key]
     return a
-
-
-def deep_replace(obj, replace):
-    if type(obj) == list:
-        _obj = []
-        for entry in obj:
-            _obj.append(deep_replace(entry, replace))
-        return _obj
-    elif type(obj) == dict:
-        _obj = {}
-        for key, val in obj.items():
-            _obj[key] = deep_replace(val, replace)
-        return _obj
-    elif type(obj) == str:
-        for key, val in replace.items():
-            obj = obj.replace(key, val)
-        return obj
-    else:
-        return obj
 
 
 def dict_get(_dict, key, default):

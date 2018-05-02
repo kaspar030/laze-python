@@ -39,7 +39,7 @@ class ModuleNotAvailable(Exception):
 def yaml_load(filename, path=None, defaults=None, parent=None):
     path = path or ""
 
-    #print("yaml_load(): loading %s with relpath %s" % (filename, path))
+    # print("yaml_load(): loading %s with relpath %s" % (filename, path))
 
     files_set.add(filename)
 
@@ -80,8 +80,8 @@ def yaml_load(filename, path=None, defaults=None, parent=None):
 
         def merge_defaults(data, _defaults):
             if _defaults:
-                #print("yaml_load(): merging defaults, base:    ", data)
-                #print("yaml_load(): merging defaults, defaults:", _defaults)
+                # print("yaml_load(): merging defaults, base:    ", data)
+                # print("yaml_load(): merging defaults, defaults:", _defaults)
                 for defaults_key in _defaults.keys():
                     if not defaults_key in data:
                         continue
@@ -92,13 +92,13 @@ def yaml_load(filename, path=None, defaults=None, parent=None):
                             merge(entry, copy.deepcopy(
                                 defaults_val), join_lists=True)
                     else:
-                        #print("yaml_load(): merging defaults,", data_val)
+                        # print("yaml_load(): merging defaults,", data_val)
                         if data_val == None:
                             data_val = {}
                             data[defaults_key] = data_val
                         merge(data_val, defaults_val,
                               override=False, join_lists=True)
-                #print("yaml_load(): merging defaults, result:  ", data)
+                # print("yaml_load(): merging defaults, result:  ", data)
 
         merge_defaults(data, _defaults)
 
@@ -162,14 +162,13 @@ class Context(Declaration):
         s.vars = None
         s.bindir = s.args.get("bindir")
 
-        print(s.name)
         if add_to_map:
             Context.map[s.name] = s
 
         s.disabled_modules = set(kwargs.get("disable_modules", []))
 
         depends(s.name)
-        #print("CONTEXT", s.name)
+        # print("CONTEXT", s.name)
 
     def __repr__(s, nest=False):
         res = "Context(" if not nest else ""
@@ -288,7 +287,7 @@ class Rule(Declaration):
             name = name[2:-1]
             if not name in {'in', 'out'}:
                 var_names.append(name)
-        #print("RULE", s.name, "vars:", var_names)
+        # print("RULE", s.name, "vars:", var_names)
         s.var_list = var_names
 
     def to_ninja(s, writer):
@@ -310,7 +309,7 @@ class Rule(Declaration):
 
     def to_ninja_build(s, writer, _in, _out, _vars=None):
         _vars = _vars or {}
-        #print("RULE", s.name, _in, _out, _vars)
+        # print("RULE", s.name, _in, _out, _vars)
         vars = {}
         for name in s.var_list:
             try:
@@ -330,13 +329,13 @@ class Rule(Declaration):
         Rule.rule_num += 1
         try:
             cached = Rule.rule_cache[cache_key]
-            #print("laze: %s using cached %s for %s %s" % (s.name, cached, _in, _out))
+            # print("laze: %s using cached %s for %s %s" % (s.name, cached, _in, _out))
             Rule.rule_cached += 1
             return cached
 
         except KeyError:
             Rule.rule_cache[cache_key] = _out
-            #print("laze: NOCACHE: %s %s ->  %s" % (s.name, _in, _out), vars)
+            # print("laze: NOCACHE: %s %s ->  %s" % (s.name, _in, _out), vars)
             writer.build(outputs=_out, rule=s.name, inputs=_in, variables=vars)
             return _out
 
@@ -401,7 +400,7 @@ class Module(Declaration):
                       (module.name, context_name))
             module.context = context
             context.modules[module.args.get("name")] = module
-            #print("MODULE", module.name, "in", context)
+            # print("MODULE", module.name, "in", context)
             module.download(module.args.get("download"))
 
     def download(s, download):
@@ -410,7 +409,7 @@ class Module(Declaration):
 
     def get_nested(s, context, name, notfound_error=True):
         try:
-            #print("get_nested(%s) returning cache " % name, s.name, [ x.name for x in s.get_nested_cache[context][name][s]])
+            # print("get_nested(%s) returning cache " % name, s.name, [ x.name for x in s.get_nested_cache[context][name][s]])
             return s.get_nested_cache[context][name][s]
         except KeyError:
             pass
@@ -453,7 +452,7 @@ class Module(Declaration):
 
         res = sorted(list(modules), key=lambda x: x.name)
 
-        #print("get_nested(%s) setting cache" % name, { s.name : [x.name for x in res] })
+        # print("get_nested(%s) setting cache" % name, { s.name : [x.name for x in res] })
         tmp = dict_get(s.get_nested_cache, context, {})
         merge(tmp, {name: {s: res}})
 
@@ -531,7 +530,7 @@ class App(Module):
         s.whitelist = _list(s, "whitelist")
         s.blacklist = _list(s, "blacklist")
 
-        #print("APP_", s.name, "path:", s.relpath)
+        # print("APP_", s.name, "path:", s.relpath)
 
     def post_parse():
         for app in App.list:
@@ -621,11 +620,11 @@ class App(Module):
                         sources.append(source)
 
                 print("USES", module.name, dict_get(module.args, "uses", []))
-                #print("MODULE_DEFINES", module.name, module_defines, module_set)
+                # print("MODULE_DEFINES", module.name, module_defines, module_set)
                 module_defines = module.get_defines(context, module_set)
 
                 vars = module.get_vars(context)
-                #print("EXPORT VARS", module.name, module.get_export_vars(context, module_set))
+                # print("EXPORT VARS", module.name, module.get_export_vars(context, module_set))
                 merge(vars, copy.deepcopy(
                     module.get_export_vars(context, module_set)))
 
@@ -643,7 +642,7 @@ class App(Module):
                         source[:-2] + rule.args.get("out"))
                     obj = rule.to_ninja_build(writer, source, obj, vars)
                     objects.append(obj)
-                    # print ( source) #, module.get_vars(context), rule.name)
+                    # print ( source) # , module.get_vars(context), rule.name)
 
             link = Rule.get_by_name("LINK")
             outfile = context.get_filepath(os.path.basename(s.name)) + ".elf"
