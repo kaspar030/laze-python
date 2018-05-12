@@ -230,10 +230,8 @@ class Builder(Context):
     pass
 
 
-rule_var_re = re.compile(r'\${\w+}')
-
-
 class Rule(Declaration):
+    rule_var_re = re.compile(r'\${\w+}')
     rule_num = 0
     rule_cached = 0
     rule_map = {}
@@ -271,7 +269,7 @@ class Rule(Declaration):
         return Rule.rule_name_map[name]
 
     def create_var_list(s):
-        _var_names = rule_var_re.findall(s.cmd)
+        _var_names = Rule.rule_var_re.findall(s.cmd)
         var_names = []
         for name in _var_names:
             name = name[2:-1]
