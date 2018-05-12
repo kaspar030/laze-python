@@ -26,16 +26,6 @@ class ParseError(Exception):
     pass
 
 
-class ModuleNotAvailable(Exception):
-    def __init__(s, context, module, dependency):
-        s.context = context
-        s.module = module
-        s.dependency = dependency
-
-    def __str__(s):
-        return "%s in %s depends on unavailable module \"%s\"" % (s.module, s.context, s.dependency)
-
-
 def yaml_load(filename, path=None, defaults=None, parent=None):
     path = path or ""
 
@@ -366,6 +356,15 @@ transtab = str.maketrans(_in, _out)
 
 
 class Module(Declaration):
+    class NotAvailable(Exception):
+        def __init__(s, context, module, dependency):
+            s.context = context
+            s.module = module
+            s.dependency = dependency
+
+        def __str__(s):
+            return "%s in %s depends on unavailable module \"%s\"" % (s.module, s.context, s.dependency)
+
     list = []
 
     def __init__(s, **kwargs):
@@ -431,14 +430,14 @@ class Module(Declaration):
                 module = context.get_module(module_name)
                 if not module:
                     if notfound_error and not optional:
-                        raise ModuleNotAvailable(context, s.name, module_name)
+                        raise Module.NotAvailable(context, s.name, module_name)
                     print("NOTFOUND", context, module_name)
                     continue
 
                 if optional:
                     try:
                         list(module.get_deps(context))
-                    except ModuleNotAvailable:
+                    except Module.NotAvailable:
                         continue
 
                 all_module_names.add(module_name)
@@ -566,7 +565,7 @@ class App(Module):
             print("  build", s.name, "for", name)
             try:
                 modules = [s] + uniquify(s.get_deps(context))
-            except ModuleNotAvailable as e:
+            except Module.NotAvailable as e:
                 print("laze: WARNING: skipping app", s.name,
                       "for builder %s:" % context.parent.name, e)
                 continue
