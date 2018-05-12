@@ -22,7 +22,6 @@ rule:
 # create a default context
 context:
     - name: default
-      bindir: bin
       vars:
           CFLAGS:
             - -Wall

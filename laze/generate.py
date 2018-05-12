@@ -7,6 +7,10 @@ import sys
 import time
 import yaml
 
+from collections import defaultdict
+
+from string import Template
+
 import click
 
 from .util import merge, listify, dict_list_product, uniquify, deep_replace, dict_get, static_vars, split
@@ -150,7 +154,7 @@ class Context(Declaration):
         s.children = []
         s.modules = {}
         s.vars = None
-        s.bindir = s.args.get("bindir")
+        s.bindir = s.args.get("bindir", "${bindir}/${name}" if s.parent else "bin")
 
         if add_to_map:
             Context.map[s.name] = s
@@ -202,20 +206,25 @@ class Context(Declaration):
 
         return s.vars
 
-    def get_bindir_list(s, _list=None):
-        if s.bindir:
-            return _list + [s.bindir]
+    def get_bindir(s):
+        if '$' in s.bindir:
+            _dict = defaultdict(lambda : "", name=s.name)
+            if s.parent:
+                _dict.update(
+                        {
+                        "parent" : s.parent.name,
+                        "bindir" : s.parent.get_bindir(),
+                        }
+                        )
 
-        _list = _list or []
-        _list += [s.name]
+            s.bindir = Template(s.bindir).substitute(_dict)
+        return s.bindir
 
-        if s.parent:
-            return s.parent.get_bindir_list(_list)
+    def get_filepath(s, filename=None):
+        if filename is not None:
+            return os.path.join(s.get_bindir(), filename)
         else:
-            return _list
-
-    def get_filepath(s, filename):
-        return os.path.join(*reversed(s.get_bindir_list([filename])))
+            return s.get_bindir()
 
     def listed(s, _set):
         if s.name in _set:
@@ -351,7 +360,6 @@ _in = "/-"
 _out = "__"
 
 transtab = str.maketrans(_in, _out)
-
 
 class Module(Declaration):
     class NotAvailable(Exception):
@@ -521,6 +529,8 @@ class App(Module):
         super().__init__(**kwargs)
         s.__class__.list.append(s)
 
+        s.bindir = s.args.get("bindir", os.path.join("${bindir}", "${name}"))
+
         def _list(s, name):
             return set(listify(s.args.get(name, []))) | App.__dict__["global_" + name] or None
 
@@ -556,7 +566,18 @@ class App(Module):
                               parent=builder, vars=s.args.get("vars", {}))
 
             #
-            context.bindir = (os.path.join(s.name, "bin", builder.name))
+            context.bindir = s.bindir
+            if '$' in context.bindir:
+                context.bindir = Template(context.bindir).substitute(
+                        {
+                            "bindir" : builder.get_bindir(),
+                            "name" : s.name,
+                            "app" : s.name,
+                            "builder" : name,
+                            }
+                        )
+            if context.bindir.startswith("./"):
+                context.bindir = os.path.join(s.relpath, context.bindir[2:])
 
             vars = context.get_vars()
 
