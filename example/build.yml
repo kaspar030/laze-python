@@ -31,6 +31,7 @@ context:
 # create a builder context with the default context as parent
 builder:
     - name: host
+      parent: default
       vars:
           CC: gcc
           LINK: gcc
