@@ -7,23 +7,25 @@ from .util import uniquify, split
 
 
 @click.command()
-@click.option('_type', '--type', type=click.Choice(['app', 'module', 'subdir']), default='app')
-@click.option('--name')
-@click.option('--context')
-@click.option('--depends', multiple=True)
-@click.option('--uses', multiple=True)
-@click.option('--sources', multiple=True)
-@click.option('--auto-sources', is_flag=True)
+@click.option(
+    "_type", "--type", type=click.Choice(["app", "module", "subdir"]), default="app"
+)
+@click.option("--name")
+@click.option("--context")
+@click.option("--depends", multiple=True)
+@click.option("--uses", multiple=True)
+@click.option("--sources", multiple=True)
+@click.option("--auto-sources", is_flag=True)
 def create(_type, name, context, depends, uses, sources, auto_sources):
-    if os.path.isfile('build.yml'):
+    if os.path.isfile("build.yml"):
         print("laze: error: 'build.yml' already exists.")
         sys.exit(1)
 
-    with open('build.yml', 'w') as f:
+    with open("build.yml", "w") as f:
         print("%s:" % _type, file=f)
 
-        if _type == 'subdir':
-            for dirname in glob.glob('*/'):
+        if _type == "subdir":
+            for dirname in glob.glob("*/"):
                 print("        - %s" % dirname.rstrip("/"), file=f)
             return
 
@@ -57,7 +59,12 @@ def create(_type, name, context, depends, uses, sources, auto_sources):
 
         if not sources and auto_sources:
             sources = []
-            for filename in glob.glob('*.c') + glob.glob('*.cpp') + glob.glob('*.s') + glob.glob('*.S'):
+            for filename in (
+                glob.glob("*.c")
+                + glob.glob("*.cpp")
+                + glob.glob("*.s")
+                + glob.glob("*.S")
+            ):
                 sources.append(filename)
 
         if sources:

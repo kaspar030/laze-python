@@ -13,7 +13,16 @@ from string import Template
 
 import click
 
-from .util import merge, listify, dict_list_product, uniquify, deep_replace, dict_get, static_vars, split
+from .util import (
+    merge,
+    listify,
+    dict_list_product,
+    uniquify,
+    deep_replace,
+    dict_get,
+    static_vars,
+    split,
+)
 
 from ninja_syntax import Writer
 
@@ -40,12 +49,19 @@ def yaml_load(filename, path=None, defaults=None, parent=None):
     def do_include(data):
         includes = listify(data.get("include"))
         for include in includes:
-            _data = yaml_load(os.path.join(os.path.dirname(
-                filename), include), path, parent=filename)[0] or {}
+            _data = (
+                yaml_load(
+                    os.path.join(os.path.dirname(filename), include),
+                    path,
+                    parent=filename,
+                )[0]
+                or {}
+            )
             _data.pop("ignore", None)
             if "template" in _data:
                 raise ParseError(
-                    "template statement in included file currently not supported!")
+                    "template statement in included file currently not supported!"
+                )
             merge(_data, data, override=True)
             data = _data
 
@@ -53,11 +69,13 @@ def yaml_load(filename, path=None, defaults=None, parent=None):
         return data
 
     try:
-        with open(filename, 'r') as f:
+        with open(filename, "r") as f:
             datas = yaml.load_all(f.read())
     except FileNotFoundError as e:
         msg = "laze: error: cannot find %s%s" % (
-            filename, " (included by %s)" % parent if parent else "")
+            filename,
+            " (included by %s)" % parent if parent else "",
+        )
         raise ParseError(msg) from e
 
     res = []
@@ -83,20 +101,18 @@ def yaml_load(filename, path=None, defaults=None, parent=None):
                     defaults_val = _defaults[defaults_key]
                     if type(data_val) == list:
                         for entry in data_val:
-                            merge(entry, copy.deepcopy(
-                                defaults_val), join_lists=True)
+                            merge(entry, copy.deepcopy(defaults_val), join_lists=True)
                     else:
                         # print("yaml_load(): merging defaults,", data_val)
                         if data_val == None:
                             data_val = {}
                             data[defaults_key] = data_val
-                        merge(data_val, defaults_val,
-                              override=False, join_lists=True)
+                        merge(data_val, defaults_val, override=False, join_lists=True)
                 # print("yaml_load(): merging defaults, result:  ", data)
 
         merge_defaults(data, _defaults)
 
-        template = data.pop('template', None)
+        template = data.pop("template", None)
 
         if template:
             result = []
@@ -118,10 +134,14 @@ def yaml_load(filename, path=None, defaults=None, parent=None):
             res.append(data)
             for subdir in listify(data.get("subdirs", [])):
                 relpath = os.path.join(path, subdir)
-                res.extend(yaml_load(os.path.join(relpath, "build.yml"),
-                                     path=relpath,
-                                     defaults=_defaults,
-                                     parent=filename))
+                res.extend(
+                    yaml_load(
+                        os.path.join(relpath, "build.yml"),
+                        path=relpath,
+                        defaults=_defaults,
+                        parent=filename,
+                    )
+                )
 
     return res
 
@@ -196,10 +216,8 @@ class Context(Declaration):
         elif s.parent:
             _vars = {}
             pvars = s.parent.get_vars()
-            merge(_vars, copy.deepcopy(pvars),
-                  override=True, change_listorder=False)
-            merge(_vars, s.args.get("vars", {}),
-                  override=True, change_listorder=False)
+            merge(_vars, copy.deepcopy(pvars), override=True, change_listorder=False)
+            merge(_vars, s.args.get("vars", {}), override=True, change_listorder=False)
             s.vars = _vars
         else:
             s.vars = s.args.get("vars", {})
@@ -207,15 +225,10 @@ class Context(Declaration):
         return s.vars
 
     def get_bindir(s):
-        if '$' in s.bindir:
-            _dict = defaultdict(lambda : "", name=s.name)
+        if "$" in s.bindir:
+            _dict = defaultdict(lambda: "", name=s.name)
             if s.parent:
-                _dict.update(
-                        {
-                        "parent" : s.parent.name,
-                        "bindir" : s.parent.get_bindir(),
-                        }
-                        )
+                _dict.update({"parent": s.parent.name, "bindir": s.parent.get_bindir()})
 
             s.bindir = Template(s.bindir).substitute(_dict)
         return s.bindir
@@ -240,7 +253,7 @@ class Builder(Context):
 
 
 class Rule(Declaration):
-    rule_var_re = re.compile(r'\${\w+}')
+    rule_var_re = re.compile(r"\${\w+}")
     rule_num = 0
     rule_cached = 0
     rule_map = {}
@@ -282,14 +295,19 @@ class Rule(Declaration):
         var_names = []
         for name in _var_names:
             name = name[2:-1]
-            if not name in {'in', 'out'}:
+            if not name in {"in", "out"}:
                 var_names.append(name)
         # print("RULE", s.name, "vars:", var_names)
         s.var_list = var_names
 
     def to_ninja(s, writer):
         writer.rule(
-            s.name, s.cmd, description="%s ${out}" % s.name, deps=s.deps, depfile=s.depfile)
+            s.name,
+            s.cmd,
+            description="%s ${out}" % s.name,
+            deps=s.deps,
+            depfile=s.depfile,
+        )
 
     def process_var_options(s, name, data):
         opts = s.args["var_options"][name]
@@ -300,9 +318,11 @@ class Rule(Declaration):
         start = opts.get("start", "")
         end = opts.get("end", "")
 
-        return start + \
-            joiner.join([prefix + entry + suffix for entry in listify(data)]) \
+        return (
+            start
+            + joiner.join([prefix + entry + suffix for entry in listify(data)])
             + end
+        )
 
     def to_ninja_build(s, writer, _in, _out, _vars=None):
         _vars = _vars or {}
@@ -320,8 +340,9 @@ class Rule(Declaration):
             except KeyError:
                 pass
 
-        cache_key = hash("rule:%s in:%s vars:%s" %
-                         (s.name, _in, hash(frozenset(vars.items()))))
+        cache_key = hash(
+            "rule:%s in:%s vars:%s" % (s.name, _in, hash(frozenset(vars.items())))
+        )
 
         Rule.rule_num += 1
         try:
@@ -346,7 +367,7 @@ def list_remove(_list):
     if _list:
         remove = set()
         for entry in _list:
-            if entry[0] == '-':
+            if entry[0] == "-":
                 remove.add(entry)
                 remove.add(entry[1:])
 
@@ -361,6 +382,7 @@ _out = "__"
 
 transtab = str.maketrans(_in, _out)
 
+
 class Module(Declaration):
     class NotAvailable(Exception):
         def __init__(s, context, module, dependency):
@@ -369,7 +391,11 @@ class Module(Declaration):
             s.dependency = dependency
 
         def __str__(s):
-            return "%s in %s depends on unavailable module \"%s\"" % (s.module, s.context, s.dependency)
+            return '%s in %s depends on unavailable module "%s"' % (
+                s.module,
+                s.context,
+                s.dependency,
+            )
 
     list = []
 
@@ -401,8 +427,10 @@ class Module(Declaration):
             context_name = module.args.get("context", "default")
             context = Context.map.get(context_name)
             if not context:
-                print("laze: error: module %s refers to unknown context %s" %
-                      (module.name, context_name))
+                print(
+                    "laze: error: module %s refers to unknown context %s"
+                    % (module.name, context_name)
+                )
             module.context = context
             context.modules[module.args.get("name")] = module
             # print("MODULE", module.name, "in", context)
@@ -513,8 +541,7 @@ class Module(Declaration):
         for dep_name in sorted(deps_available):
             if short_module_defines:
                 dep_name = os.path.basename(dep_name)
-            dep_defines.append(
-                "-DMODULE_" + dep_name.upper().translate(transtab))
+            dep_defines.append("-DMODULE_" + dep_name.upper().translate(transtab))
         return dep_defines
 
 
@@ -532,7 +559,10 @@ class App(Module):
         s.bindir = s.args.get("bindir", os.path.join("${bindir}", "${name}"))
 
         def _list(s, name):
-            return set(listify(s.args.get(name, []))) | App.__dict__["global_" + name] or None
+            return (
+                set(listify(s.args.get(name, []))) | App.__dict__["global_" + name]
+                or None
+            )
 
         s.whitelist = _list(s, "whitelist")
         s.blacklist = _list(s, "blacklist")
@@ -562,20 +592,24 @@ class App(Module):
                 continue
 
             #
-            context = Context(add_to_map=False, name=s.name,
-                              parent=builder, vars=s.args.get("vars", {}))
+            context = Context(
+                add_to_map=False,
+                name=s.name,
+                parent=builder,
+                vars=s.args.get("vars", {}),
+            )
 
             #
             context.bindir = s.bindir
-            if '$' in context.bindir:
+            if "$" in context.bindir:
                 context.bindir = Template(context.bindir).substitute(
-                        {
-                            "bindir" : builder.get_bindir(),
-                            "name" : s.name,
-                            "app" : s.name,
-                            "builder" : name,
-                            }
-                        )
+                    {
+                        "bindir": builder.get_bindir(),
+                        "name": s.name,
+                        "app": s.name,
+                        "builder": name,
+                    }
+                )
             if context.bindir.startswith("./"):
                 context.bindir = os.path.join(s.relpath, context.bindir[2:])
 
@@ -585,8 +619,12 @@ class App(Module):
             try:
                 modules = [s] + uniquify(s.get_deps(context))
             except Module.NotAvailable as e:
-                print("laze: WARNING: skipping app", s.name,
-                      "for builder %s:" % context.parent.name, e)
+                print(
+                    "laze: WARNING: skipping app",
+                    s.name,
+                    "for builder %s:" % context.parent.name,
+                    e,
+                )
                 continue
 
             App.count += 1
@@ -602,7 +640,7 @@ class App(Module):
                 if _tmp:
                     print("    %s: uses:" % module.name, _tmp)
 
-                module_global_vars = module.args.get('global_vars', {})
+                module_global_vars = module.args.get("global_vars", {})
                 if module_global_vars:
                     merge(vars, module_global_vars)
                     print("    global_vars:", module_global_vars, vars)
@@ -627,9 +665,9 @@ class App(Module):
                                 print("OPTIONAL sources:", module.name, value)
                                 sources.extend(listify(value))
                                 if use_optional_source_deps == None:
-                                    use_optional_source_deps = \
-                                        module.args.get("options", {}).get(
-                                            "use_optional_source_deps", False)
+                                    use_optional_source_deps = module.args.get(
+                                        "options", {}
+                                    ).get("use_optional_source_deps", False)
                                 if use_optional_source_deps:
                                     uses = dict_get(module.args, "uses", [])
                                     print("OPTIONAL USED:", module.name, key)
@@ -643,8 +681,7 @@ class App(Module):
 
                 vars = module.get_vars(context)
                 # print("EXPORT VARS", module.name, module.get_export_vars(context, module_set))
-                merge(vars, copy.deepcopy(
-                    module.get_export_vars(context, module_set)))
+                merge(vars, copy.deepcopy(module.get_export_vars(context, module_set)))
 
                 # add "-DMODULE_<module_name> for each used/depended module
                 if module_defines:
@@ -656,8 +693,7 @@ class App(Module):
                     source = module.locate_source(source)
                     rule = Rule.get_by_extension(source)
 
-                    obj = context.get_filepath(
-                        source[:-2] + rule.args.get("out"))
+                    obj = context.get_filepath(source[:-2] + rule.args.get("out"))
                     obj = rule.to_ninja_build(writer, source, obj, vars)
                     objects.append(obj)
                     # print ( source) # , module.get_vars(context), rule.name)
@@ -665,14 +701,15 @@ class App(Module):
             link = Rule.get_by_name("LINK")
             outfile = context.get_filepath(os.path.basename(s.name)) + ".elf"
 
-            res = link.to_ninja_build(
-                writer, objects, outfile, context.get_vars())
+            res = link.to_ninja_build(writer, objects, outfile, context.get_vars())
             if res != outfile:
                 symlink = Rule.get_by_name("SYMLINK")
                 symlink.to_ninja_build(writer, res, outfile)
 
             depends(context.parent.name, outfile)
             depends(s.name, outfile)
+
+
 #            print("")
 
 
@@ -686,9 +723,9 @@ class_map = {
 
 
 @click.command()
-@click.argument('buildfile')
-@click.option('--whitelist', multiple=True, envvar='LAZE_WHITELIST')
-@click.option('--apps', multiple=True, envvar='LAZE_APPS')
+@click.argument("buildfile")
+@click.option("--whitelist", multiple=True, envvar="LAZE_WHITELIST")
+@click.option("--apps", multiple=True, envvar="LAZE_APPS")
 def generate(buildfile, whitelist, apps):
     global writer
 
@@ -713,8 +750,9 @@ def generate(buildfile, whitelist, apps):
     for filename in files_set:
         files_list.append(filename)
     writer.rule("relaze", "laze generate ${in}", restat=True, generator=True)
-    writer.build(rule="relaze", outputs="build.ninja",
-                 implicit=files_list, inputs=buildfile)
+    writer.build(
+        rule="relaze", outputs="build.ninja", implicit=files_list, inputs=buildfile
+    )
 
     before = time.time()
     # PARSING PHASE
@@ -738,8 +776,10 @@ def generate(buildfile, whitelist, apps):
     print("laze: processing buildfiles took %.2fs" % (time.time() - before))
     print("laze: building %s applications" % App.count)
     if Rule.rule_num:
-        print("laze: cached: %s/%s (%.2f%%)" % (Rule.rule_cached,
-                                                Rule.rule_num, Rule.rule_cached * 100 / Rule.rule_num))
+        print(
+            "laze: cached: %s/%s (%.2f%%)"
+            % (Rule.rule_cached, Rule.rule_num, Rule.rule_cached * 100 / Rule.rule_num)
+        )
 
     for dep, _set in depends.map.items():
         writer.build(rule="phony", outputs=dep, inputs=list(_set))

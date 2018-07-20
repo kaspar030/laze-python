@@ -38,7 +38,7 @@ def dict_list_product(_dict):
         for key, val in _tuple:
             res[key] = val
 
-        yield(res)
+        yield (res)
 
 
 def deep_replace(obj, replace):
@@ -60,8 +60,15 @@ def deep_replace(obj, replace):
         return obj
 
 
-def merge(a, b, path=None, override=False, change_listorder=False,
-          only_existing=False, join_lists=False):
+def merge(
+    a,
+    b,
+    path=None,
+    override=False,
+    change_listorder=False,
+    only_existing=False,
+    join_lists=False,
+):
     "merges b into a"
     if path is None:
         path = []
@@ -74,8 +81,13 @@ def merge(a, b, path=None, override=False, change_listorder=False,
                     a[key] = [a[key]]
 
             if isinstance(a[key], dict) and isinstance(b[key], dict):
-                merge(a[key], b[key], path=path + [str(key)],
-                      override=override, join_lists=join_lists)
+                merge(
+                    a[key],
+                    b[key],
+                    path=path + [str(key)],
+                    override=override,
+                    join_lists=join_lists,
+                )
             elif isinstance(a[key], set) and isinstance(b[key], set):
                 a[key] = a[key] | b[key]
             elif isinstance(a[key], list) and isinstance(b[key], list):
@@ -91,8 +103,10 @@ def merge(a, b, path=None, override=False, change_listorder=False,
                 if override:
                     a[key] = b[key]
                 else:
-                    raise Exception('Conflict at %s (%s, %s)' % (
-                        '.'.join(path + [str(key)]), a[key], b[key]))
+                    raise Exception(
+                        "Conflict at %s (%s, %s)"
+                        % (".".join(path + [str(key)]), a[key], b[key])
+                    )
         else:
             if not only_existing:
                 a[key] = b[key]
@@ -113,10 +127,11 @@ def static_vars(**kwargs):
         for k in kwargs:
             setattr(func, k, kwargs[k])
         return func
+
     return decorate
 
 
-def split(_list, splitter=','):
+def split(_list, splitter=","):
     tmp = []
     for entry in _list:
         tmp.extend(entry.split(splitter))
