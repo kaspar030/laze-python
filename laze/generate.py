@@ -25,9 +25,9 @@ from .util import (
 )
 
 from ninja_syntax import Writer
+import laze.dl as dl
 
 files_set = set()
-
 short_module_defines = True
 
 
@@ -150,6 +150,7 @@ class Declaration(object):
     def __init__(s, **kwargs):
         s.args = kwargs
         s.relpath = s.args.get("_relpath")
+        s.override_source_location = None
 
         _vars = s.args.get("vars", {})
         for key, value in _vars.items():
@@ -160,7 +161,10 @@ class Declaration(object):
         pass
 
     def locate_source(s, filename):
-        return os.path.join(s.relpath, filename)
+        if s.override_source_location:
+            return os.path.join(s.override_source_location, filename)
+        else:
+            return os.path.join(s.relpath, filename)
 
 
 class Context(Declaration):
@@ -434,11 +438,14 @@ class Module(Declaration):
             module.context = context
             context.modules[module.args.get("name")] = module
             # print("MODULE", module.name, "in", context)
-            module.download(module.args.get("download"))
+            module.handle_download(module.args.get("download"))
 
-    def download(s, download):
+    def handle_download(s, download):
         if download:
-            print("DOWNLOAD", s.name, download)
+            dldir = os.path.join(".laze", "dl", s.relpath, s.name)
+            print("DOWNLOAD", s.name, download, dldir)
+            s.override_source_location = dldir
+            dl.add_to_queue(download, dldir)
 
     def get_nested(s, context, name, notfound_error=True):
         try:
@@ -690,11 +697,11 @@ class App(Module):
                     cflags.extend(module_defines)
 
                 for source in sources:
-                    source = module.locate_source(source)
+                    source_in = module.locate_source(source)
                     rule = Rule.get_by_extension(source)
 
                     obj = context.get_filepath(source[:-2] + rule.args.get("out"))
-                    obj = rule.to_ninja_build(writer, source, obj, vars)
+                    obj = rule.to_ninja_build(writer, source_in, obj, vars)
                     objects.append(obj)
                     # print ( source) # , module.get_vars(context), rule.name)
 
@@ -783,3 +790,6 @@ def generate(buildfile, whitelist, apps):
 
     for dep, _set in depends.map.items():
         writer.build(rule="phony", outputs=dep, inputs=list(_set))
+
+    # download external sources
+    dl.start()
