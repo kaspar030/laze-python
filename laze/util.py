@@ -3,6 +3,8 @@ from itertools import product
 
 
 def listify(something):
+    """ if something is a list, return it.  else, return [something]."""
+
     if not something:
         return []
     if not type(something) == list:
@@ -11,7 +13,11 @@ def listify(something):
 
 
 def uniquify(seq):
-    # Order preserving
+    """ make sure each member of seq is in there only once.
+
+    order-reserving.
+    """
+
     seen = set()
     return [x for x in seq if x not in seen and not seen.add(x)]
 
@@ -69,7 +75,8 @@ def merge(
     only_existing=False,
     join_lists=False,
 ):
-    "merges b into a"
+    """merges b into a"""
+
     if path is None:
         path = []
     for key in b:
