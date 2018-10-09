@@ -328,7 +328,7 @@ class Rule(Declaration):
             + end
         )
 
-    def to_ninja_build(s, writer, _in, _out, _vars=None):
+    def to_ninja_build(s, writer, _in, _out, _vars=None, _dict=None):
         _vars = _vars or {}
         # print("RULE", s.name, _in, _out, _vars)
         vars = {}
@@ -340,6 +340,9 @@ class Rule(Declaration):
                 except KeyError:
                     if type(data) == list:
                         data = " ".join(data)
+                if _dict is not None:
+                    if "$" in data:
+                        data = Template(data).substitute(_dict)
                 vars[name] = data
             except KeyError:
                 pass
@@ -690,6 +693,10 @@ class App(Module):
                 # print("EXPORT VARS", module.name, module.get_export_vars(context, module_set))
                 merge(vars, copy.deepcopy(module.get_export_vars(context, module_set)))
 
+                vars_subst_dict = {
+                        "source_folder" : module.locate_source(""),
+                        }
+
                 # add "-DMODULE_<module_name> for each used/depended module
                 if module_defines:
                     vars = copy.deepcopy(vars)
@@ -701,7 +708,7 @@ class App(Module):
                     rule = Rule.get_by_extension(source)
 
                     obj = context.get_filepath(source[:-2] + rule.args.get("out"))
-                    obj = rule.to_ninja_build(writer, source_in, obj, vars)
+                    obj = rule.to_ninja_build(writer, source_in, obj, vars, vars_subst_dict)
                     objects.append(obj)
                     # print ( source) # , module.get_vars(context), rule.name)
 
