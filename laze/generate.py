@@ -717,14 +717,14 @@ class App(Module):
 
             res = link.to_ninja_build(writer, objects, outfile, context.get_vars())
             if res != outfile:
+                # An identical binary has been built for another Application.
+                # As the binary can be considered a final target, create a file
+                # symbolic link.
                 symlink = Rule.get_by_name("SYMLINK")
                 symlink.to_ninja_build(writer, res, outfile)
 
             depends(context.parent.name, outfile)
             depends(s.name, outfile)
-
-
-#            print("")
 
 
 class_map = {
