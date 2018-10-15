@@ -30,14 +30,7 @@ import laze.dl as dl
 files_set = set()
 short_module_defines = True
 
-
-class InvalidArgument(Exception):
-    pass
-
-
-class ParseError(Exception):
-    pass
-
+from laze.common import ParseError, InvalidArgument
 
 def yaml_load(filename, path=None, defaults=None, parent=None):
     path = path or ""
