@@ -32,13 +32,8 @@ short_module_defines = True
 
 from laze.common import ParseError, InvalidArgument
 
-def yaml_load(filename, path=None, defaults=None, parent=None):
-    path = path or ""
 
-    # print("yaml_load(): loading %s with relpath %s" % (filename, path))
-
-    files_set.add(filename)
-
+def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
     def do_include(data):
         includes = listify(data.get("include"))
         for include in includes:
@@ -47,6 +42,7 @@ def yaml_load(filename, path=None, defaults=None, parent=None):
                     os.path.join(os.path.dirname(filename), include),
                     path,
                     parent=filename,
+                    imports=imports,
                 )[0]
                 or {}
             )
@@ -61,6 +57,19 @@ def yaml_load(filename, path=None, defaults=None, parent=None):
         data.pop("include", None)
         return data
 
+    def remember_imports():
+        _imports = listify(data.get("import"))
+        for _import in _imports:
+            imports.append((filename, _import))
+
+    path = path or ""
+
+    # print("yaml_load(): loading %s with relpath %s" % (filename, path))
+
+    files_set.add(filename)
+    if parent is None:
+        imports = []
+
     try:
         with open(filename, "r") as f:
             datas = yaml.load_all(f.read())
@@ -73,6 +82,8 @@ def yaml_load(filename, path=None, defaults=None, parent=None):
 
     res = []
     for data in datas:
+        remember_imports()
+
         data_defaults = data.get("defaults", {})
 
         _defaults = defaults
@@ -133,8 +144,60 @@ def yaml_load(filename, path=None, defaults=None, parent=None):
                         path=relpath,
                         defaults=_defaults,
                         parent=filename,
+                        imports=imports,
                     )
                 )
+
+    if parent is None:
+        while imports:
+            #print("IMPORTS:", imports)
+            imported_list = []
+            imports_as_dicts = []
+            for _import_tuple in imports:
+                importer_filename, _import = _import_tuple
+                if type(_import) is dict:
+                    for k, v in _import.items():
+                        imports_as_dicts.append((importer_filename, k, v))
+                else:
+                    imports_as_dicts.append((importer_filename, _import, None))
+
+            for _import_tuple in imports_as_dicts:
+                importer_filename, name, import_dict = _import_tuple
+                if import_dict is not None:
+                    url = import_dict.get("url")
+                    version = import_dict.get("version")
+                else:
+                    url = None
+                    version = None
+
+                if url is None:
+                    url = name
+                    name = os.path.basename(name)
+
+                dl_source = {"git": {"url": url}}
+
+                folder = os.path.join("imports", name)
+                if version is not None:
+                    dl_source["git"]["commit"] = version
+                    folder = os.path.join(folder, version)
+                else:
+                    folder = os.path.join(folder, "latest")
+
+                imported_list.append((name, importer_filename, folder))
+                dl.add_to_queue(dl_source, folder)
+
+            dl.start()
+
+            imports = []
+            for imported in imported_list:
+                #print("YY", imported_list)
+                name, importer_filename, folder = imported
+                res.extend(yaml_load(
+                    os.path.join(folder, "laze.yml"),
+                    path=folder,
+                    parent=importer_filename,
+                    imports=imports,
+                ))
 
     return res
 
@@ -742,7 +805,7 @@ def generate(buildfile, whitelist, apps):
 
     before = time.time()
     try:
-        data_list = yaml_load(buildfile, parent=buildfile)
+        data_list = yaml_load(buildfile)
     except ParseError as e:
         print(e)
         sys.exit(1)
