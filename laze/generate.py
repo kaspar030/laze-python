@@ -730,7 +730,7 @@ class_map = {
 
 
 @click.command()
-@click.argument("buildfile")
+@click.option("--buildfile", "-f", type=click.STRING, default="laze.yml", envvar="LAZE_BUILDFILE")
 @click.option("--whitelist", multiple=True, envvar="LAZE_WHITELIST")
 @click.option("--apps", multiple=True, envvar="LAZE_APPS")
 def generate(buildfile, whitelist, apps):
