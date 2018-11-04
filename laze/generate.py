@@ -828,12 +828,9 @@ def generate(buildfile, whitelist, apps):
     #
 
     # create rule for automatically re-running laze if necessary
-    files_list = []
-    for filename in files_set:
-        files_list.append(filename)
-    writer.rule("relaze", "laze generate ${in}", restat=True, generator=True)
+    writer.rule("relaze", "laze generate --buildfile ${in}", restat=True, generator=True)
     writer.build(
-        rule="relaze", outputs="build.ninja", implicit=files_list, inputs=buildfile
+        rule="relaze", outputs="build.ninja", implicit=list(files_set), inputs=buildfile
     )
 
     before = time.time()
