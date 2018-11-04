@@ -1,5 +1,7 @@
 import traceback
 from itertools import product
+import hashlib
+import json
 
 
 def listify(something):
@@ -146,3 +148,15 @@ def split(_list, splitter=","):
     _list.extend(tmp)
 
     return _list
+
+
+def _dict_digest(_dict):
+    return hashlib.sha1(json.dumps(_dict, sort_keys=True).encode("utf-8"))
+
+
+def dict_digest(_dict):
+    return _dict_digest(_dict).digest()
+
+
+def dict_hexdigest(_dict):
+    return _dict_digest(_dict).hexdigest()
