@@ -176,7 +176,7 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
 
                 dl_source = {"git": {"url": url}}
 
-                folder = os.path.join("imports", name)
+                folder = os.path.join(".laze/imports", name)
                 if version is not None:
                     dl_source["git"]["commit"] = version
                     folder = os.path.join(folder, version)
