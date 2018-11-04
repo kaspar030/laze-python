@@ -759,9 +759,7 @@ class App(Module):
                 # print("EXPORT VARS", module.name, module.get_export_vars(context, module_set))
                 merge(vars, copy.deepcopy(module.get_export_vars(context, module_set)))
 
-                vars_subst_dict = {
-                        "source_folder" : module.locate_source(""),
-                        }
+                vars_subst_dict = {"source_folder": module.locate_source("")}
 
                 # add "-DMODULE_<module_name> for each used/depended module
                 if module_defines:
@@ -774,7 +772,9 @@ class App(Module):
                     rule = Rule.get_by_extension(source)
 
                     obj = context.get_filepath(source[:-2] + rule.args.get("out"))
-                    obj = rule.to_ninja_build(writer, source_in, obj, vars, vars_subst_dict)
+                    obj = rule.to_ninja_build(
+                        writer, source_in, obj, vars, vars_subst_dict
+                    )
                     objects.append(obj)
                     # print ( source) # , module.get_vars(context), rule.name)
 
@@ -803,7 +803,9 @@ class_map = {
 
 
 @click.command()
-@click.option("--buildfile", "-f", type=click.STRING, default="laze.yml", envvar="LAZE_BUILDFILE")
+@click.option(
+    "--buildfile", "-f", type=click.STRING, default="laze.yml", envvar="LAZE_BUILDFILE"
+)
 @click.option("--whitelist", "-W", multiple=True, envvar="LAZE_WHITELIST")
 @click.option("--apps", "-A", multiple=True, envvar="LAZE_APPS")
 def generate(buildfile, whitelist, apps):
