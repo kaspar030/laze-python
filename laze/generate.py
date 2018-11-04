@@ -781,7 +781,7 @@ def generate(buildfile, whitelist, apps):
         _class.post_parse()
 
     print("laze: processing buildfiles took %.2fs" % (time.time() - before))
-    print("laze: building %s applications" % App.count)
+    print("laze: configured %s applications" % App.count)
     if Rule.rule_num:
         print(
             "laze: cached: %s/%s (%.2f%%)"
