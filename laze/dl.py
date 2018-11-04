@@ -1,17 +1,44 @@
 import os
 import subprocess
+import json
 
 from laze.common import InvalidArgument
+from shutil import rmtree
+
 
 queue = {}
 
 
+def state_filename(target):
+    return os.path.join(target, ".laze-dl.yml")
+
+
+def write_state(source, target):
+
+    with open(state_filename(target), "w") as f:
+        json.dump(source, f, indent=4, sort_keys=True)
+
+
+def read_state(target):
+    try:
+        with open(state_filename(target), "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.decoder.JSONDecodeError):
+        return None
+
+
 def git_clone(source, target, commit=None):
     if os.path.isdir(os.path.join(target, ".git")):
-        print(
-            'laze: skip cloning "%s" to "%s", target already exists.' % (source, target)
-        )
-        return
+        if read_state(target) == source:
+            # TODO: let git confirm the checkout is in pristine state
+            print(
+                'laze: not cloning "%s" to "%s", target already exists.'
+                % (source, target)
+            )
+            return
+        else:
+            print('laze: cleaning "%s"' % target)
+            rmtree(target)
 
     print('laze: cloning "%s" to "%s"' % (source, target))
     subprocess.check_call(["git", "clone", source, target])
@@ -19,6 +46,8 @@ def git_clone(source, target, commit=None):
     if commit is not None:
         print('laze: setting "%s" to commit %s' % (target, commit))
         subprocess.check_call(["git", "-C", target, "reset", "--hard", commit])
+
+    write_state(source, target)
 
 
 def add_to_queue(download_source, target):
@@ -55,3 +84,10 @@ def start():
 
         if error:
             raise InvalidArgument("laze: error: don't know how to download %s" % source)
+
+    reset()
+
+
+def reset():
+    global queue
+    queue = {}
