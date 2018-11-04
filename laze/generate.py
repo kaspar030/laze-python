@@ -385,6 +385,14 @@ class Rule(Declaration):
         )
 
     def to_ninja_build(s, writer, _in, _out, _vars=None, _dict=None):
+        def control_key(x):
+            x = x[0]
+            if x == "<":
+                return 0
+            elif x == ">":
+                return 2
+            return 1
+
         _vars = _vars or {}
         # print("RULE", s.name, _in, _out, _vars)
         vars = {}
@@ -395,6 +403,8 @@ class Rule(Declaration):
                     data = s.process_var_options(name, data)
                 except KeyError:
                     if type(data) == list:
+                        data.sort(key=control_key)
+                        data[:] = [ x[1:] if x[0] in '\<>' else x for x in data ]
                         data = " ".join(data)
                 if _dict is not None:
                     if "$" in data:
