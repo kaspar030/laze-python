@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import fastentrypoints
+
 from setuptools import setup
 # To use a consistent encoding
 from codecs import open
