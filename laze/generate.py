@@ -222,9 +222,10 @@ class Declaration(object):
 
     def locate_source(s, filename):
         if s.override_source_location:
-            return os.path.join(s.override_source_location, filename)
+            res = os.path.join(s.override_source_location, filename)
         else:
-            return os.path.join(s.relpath, filename)
+            res = os.path.join(s.relpath, filename)
+        return res.rstrip("/") or "."
 
 
 class Context(Declaration):
