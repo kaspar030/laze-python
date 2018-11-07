@@ -34,6 +34,7 @@ from laze.common import ParseError, InvalidArgument
 
 BUILDFILE_NAME = "laze.yml"
 
+
 def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
     def do_include(data):
         includes = listify(data.get("include"))
@@ -193,12 +194,14 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
             for imported in imported_list:
                 #print("YY", imported_list)
                 name, importer_filename, folder = imported
-                res.extend(yaml_load(
-                    os.path.join(folder, "laze.yml"),
-                    path=folder,
-                    parent=importer_filename,
-                    imports=imports,
-                ))
+                res.extend(
+                    yaml_load(
+                        os.path.join(folder, BUILDFILE_NAME),
+                        path=folder,
+                        parent=importer_filename,
+                        imports=imports,
+                    )
+                )
 
     return res
 
@@ -805,7 +808,7 @@ class_map = {
 
 @click.command()
 @click.option(
-    "--buildfile", "-f", type=click.STRING, default="laze.yml", envvar="LAZE_BUILDFILE"
+    "--buildfile", "-f", type=click.STRING, default=BUILDFILE_NAME, envvar="LAZE_BUILDFILE"
 )
 @click.option("--whitelist", "-W", multiple=True, envvar="LAZE_WHITELIST")
 @click.option("--apps", "-A", multiple=True, envvar="LAZE_APPS")
