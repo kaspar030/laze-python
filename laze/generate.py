@@ -152,7 +152,7 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
 
     if parent is None:
         while imports:
-            #print("IMPORTS:", imports)
+            # print("IMPORTS:", imports)
             imported_list = []
             imports_as_dicts = []
             for _import_tuple in imports:
@@ -192,7 +192,7 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
 
             imports = []
             for imported in imported_list:
-                #print("YY", imported_list)
+                # print("YY", imported_list)
                 name, importer_filename, folder = imported
                 res.extend(
                     yaml_load(
@@ -409,7 +409,7 @@ class Rule(Declaration):
                 except KeyError:
                     if type(data) == list:
                         data.sort(key=control_key)
-                        data[:] = [ x[1:] if x[0] in '\<>' else x for x in data ]
+                        data[:] = [x[1:] if x[0] in "\<>" else x for x in data]
                         data = " ".join(data)
                 vars[name] = data
             except KeyError:
@@ -613,7 +613,7 @@ class Module(Declaration):
         return vars
 
     def vars_substitute(self, vars, context):
-        _dict = { "source_folder" : self.locate_source("")}
+        _dict = {"source_folder": self.locate_source("")}
         for k, v in vars.items():
             if type(v) == list:
                 for n, entry in enumerate(v):
@@ -781,7 +781,10 @@ class App(Module):
 
                 module_vars = module.get_vars(context)
                 # print("EXPORT VARS", module.name, module.get_export_vars(context, module_set))
-                merge(module_vars, copy.deepcopy(module.get_export_vars(context, module_set)))
+                merge(
+                    module_vars,
+                    copy.deepcopy(module.get_export_vars(context, module_set)),
+                )
 
                 # add "-DMODULE_<module_name> for each used/depended module
                 if module_defines:
@@ -824,7 +827,11 @@ class_map = {
 
 @click.command()
 @click.option(
-    "--buildfile", "-f", type=click.STRING, default=BUILDFILE_NAME, envvar="LAZE_BUILDFILE"
+    "--buildfile",
+    "-f",
+    type=click.STRING,
+    default=BUILDFILE_NAME,
+    envvar="LAZE_BUILDFILE",
 )
 @click.option("--whitelist", "-W", multiple=True, envvar="LAZE_WHITELIST")
 @click.option("--apps", "-A", multiple=True, envvar="LAZE_APPS")
@@ -848,7 +855,9 @@ def generate(buildfile, whitelist, apps):
     #
 
     # create rule for automatically re-running laze if necessary
-    writer.rule("relaze", "laze generate --buildfile ${in}", restat=True, generator=True)
+    writer.rule(
+        "relaze", "laze generate --buildfile ${in}", restat=True, generator=True
+    )
     writer.build(
         rule="relaze", outputs="build.ninja", implicit=list(files_set), inputs=buildfile
     )
