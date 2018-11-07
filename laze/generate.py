@@ -32,6 +32,7 @@ short_module_defines = True
 
 from laze.common import ParseError, InvalidArgument
 
+BUILDFILE_NAME = "laze.yml"
 
 def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
     def do_include(data):
@@ -140,7 +141,7 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
                 relpath = os.path.join(path, subdir)
                 res.extend(
                     yaml_load(
-                        os.path.join(relpath, "build.yml"),
+                        os.path.join(relpath, BUILDFILE_NAME),
                         path=relpath,
                         defaults=_defaults,
                         parent=filename,
