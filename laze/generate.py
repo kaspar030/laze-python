@@ -389,7 +389,7 @@ class Rule(Declaration):
             + end
         )
 
-    def to_ninja_build(s, writer, _in, _out, _vars=None, _dict=None):
+    def to_ninja_build(s, writer, _in, _out, _vars=None):
         def control_key(x):
             x = x[0]
             if x == "<":
@@ -411,9 +411,6 @@ class Rule(Declaration):
                         data.sort(key=control_key)
                         data[:] = [ x[1:] if x[0] in '\<>' else x for x in data ]
                         data = " ".join(data)
-                if _dict is not None:
-                    if "$" in data:
-                        data = Template(data).substitute(_dict)
                 vars[name] = data
             except KeyError:
                 pass
@@ -589,6 +586,8 @@ class Module(Declaration):
         vars = s.args.get("vars", {})
         if vars:
             _vars = copy.deepcopy(context.get_vars())
+            _vars = s.vars_substitute(_vars, context)
+
             merge(_vars, vars, override=True)
             return _vars
         else:
@@ -599,13 +598,32 @@ class Module(Declaration):
             return s.export_vars[context]
         except KeyError:
             pass
+
         vars = s.args.get("export_vars", {})
+        vars = s.vars_substitute(vars, context)
 
         for dep in s.get_used(context, all=True):
             if dep.name in module_set:
-                merge(vars, dep.args.get("export_vars", {}))
+                dep_export_vars = dep.args.get("export_vars", {})
+                if dep_export_vars:
+                    dep_export_vars = dep.vars_substitute(dep_export_vars, context)
+                    merge(vars, dep_export_vars, join_lists=True)
 
         s.export_vars[context] = vars
+        return vars
+
+    def vars_substitute(self, vars, context):
+        _dict = { "source_folder" : self.locate_source("")}
+        for k, v in vars.items():
+            if type(v) == list:
+                for n, entry in enumerate(v):
+                    if "$" in entry:
+                        v[n] = Template(entry).substitute(_dict)
+                        print("entry:", k, v, entry, _dict)
+            else:
+                if "$" in v:
+                    vars[k] = Template(v).substitute(_dict)
+
         return vars
 
     def uses_all(s):
@@ -694,7 +712,7 @@ class App(Module):
             if context.bindir.startswith("./"):
                 context.bindir = os.path.join(s.relpath, context.bindir[2:])
 
-            vars = context.get_vars()
+            context_vars = context.get_vars()
 
             print("  build", s.name, "for", name)
             try:
@@ -722,11 +740,12 @@ class App(Module):
                     print("    %s: uses:" % module.name, _tmp)
 
                 module_global_vars = module.args.get("global_vars", {})
+                module_global_vars = module.vars_substitute(module_global_vars, context)
                 if module_global_vars:
-                    merge(vars, module_global_vars)
-                    print("    global_vars:", module_global_vars, vars)
+                    merge(context_vars, module_global_vars, join_lists=True)
+                    print("    global_vars:", module_global_vars, context_vars)
 
-            print("    %s:" % context, vars)
+            print("    %s:" % context, context_vars)
 
             global writer
             sources = []
@@ -760,16 +779,14 @@ class App(Module):
                 # print("MODULE_DEFINES", module.name, module_defines, module_set)
                 module_defines = module.get_defines(context, module_set)
 
-                vars = module.get_vars(context)
+                module_vars = module.get_vars(context)
                 # print("EXPORT VARS", module.name, module.get_export_vars(context, module_set))
-                merge(vars, copy.deepcopy(module.get_export_vars(context, module_set)))
-
-                vars_subst_dict = {"source_folder": module.locate_source("")}
+                merge(module_vars, copy.deepcopy(module.get_export_vars(context, module_set)))
 
                 # add "-DMODULE_<module_name> for each used/depended module
                 if module_defines:
-                    vars = copy.deepcopy(vars)
-                    cflags = dict_get(vars, "CFLAGS", [])
+                    module_vars = copy.deepcopy(module_vars)
+                    cflags = dict_get(module_vars, "CFLAGS", [])
                     cflags.extend(module_defines)
 
                 for source in sources:
@@ -777,9 +794,7 @@ class App(Module):
                     rule = Rule.get_by_extension(source)
 
                     obj = context.get_filepath(source[:-2] + rule.args.get("out"))
-                    obj = rule.to_ninja_build(
-                        writer, source_in, obj, vars, vars_subst_dict
-                    )
+                    obj = rule.to_ninja_build(writer, source_in, obj, module_vars)
                     objects.append(obj)
                     # print ( source) # , module.get_vars(context), rule.name)
 
