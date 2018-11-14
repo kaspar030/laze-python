@@ -796,7 +796,7 @@ class App(Module):
                     source_in = module.locate_source(source)
                     rule = Rule.get_by_extension(source)
 
-                    obj = context.get_filepath(source[:-2] + rule.args.get("out"))
+                    obj = context.get_filepath(os.path.join(module.relpath, source[:-2] + rule.args.get("out")))
                     obj = rule.to_ninja_build(writer, source_in, obj, module_vars)
                     objects.append(obj)
                     # print ( source) # , module.get_vars(context), rule.name)
