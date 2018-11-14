@@ -239,7 +239,7 @@ class Context(Declaration):
         s.children = []
         s.modules = {}
         s.vars = None
-        s.bindir = s.args.get("bindir", "${bindir}/${name}" if s.parent else "bin")
+        s.bindir = s.args.get("bindir", "${bindir}/${name}" if s.parent else "build")
 
         if add_to_map:
             Context.map[s.name] = s
