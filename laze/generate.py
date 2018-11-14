@@ -27,10 +27,10 @@ from .util import (
 from ninja_syntax import Writer
 import laze.dl as dl
 
+from laze.common import ParseError, InvalidArgument
+
 files_set = set()
 short_module_defines = True
-
-from laze.common import ParseError, InvalidArgument
 
 BUILDFILE_NAME = "laze.yml"
 
@@ -101,7 +101,7 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
                 # print("yaml_load(): merging defaults, base:    ", data)
                 # print("yaml_load(): merging defaults, defaults:", _defaults)
                 for defaults_key in _defaults.keys():
-                    if not defaults_key in data:
+                    if defaults_key not in data:
                         continue
                     data_val = data.get(defaults_key)
                     defaults_val = _defaults[defaults_key]
