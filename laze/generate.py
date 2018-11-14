@@ -375,6 +375,17 @@ class Rule(Declaration):
         )
 
     def process_var_options(s, name, data):
+        """ interpret smart options.
+
+        Use like e.g.,
+            var_options:
+              includes:
+                prefix: -I
+
+        to get a list of path names joined as C include arguments.
+        [ "include/foo", "include/bar" ] -> "-Iinclude/foo -Iinclude/bar"
+        """
+
         opts = s.args["var_options"][name]
 
         joiner = opts.get("joiner", " ")
@@ -391,6 +402,12 @@ class Rule(Declaration):
 
     def to_ninja_build(s, writer, _in, _out, _vars=None):
         def control_key(x):
+            """ var sort helper key function
+
+            Sorts strings starting with < to the beginning,
+            starting with > to the end.
+            """
+
             x = x[0]
             if x == "<":
                 return 0
@@ -409,6 +426,7 @@ class Rule(Declaration):
                 except KeyError:
                     if type(data) == list:
                         data.sort(key=control_key)
+                        # drop \, < > if it is at the beginning of a string.
                         data[:] = [x[1:] if x[0] in "\<>" else x for x in data]
                         data = " ".join(data)
                 vars[name] = data
