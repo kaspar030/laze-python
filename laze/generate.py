@@ -207,53 +207,53 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
 
 
 class Declaration(object):
-    def __init__(s, **kwargs):
-        s.args = kwargs
-        s.relpath = s.args.get("_relpath")
-        s.override_source_location = None
+    def __init__(self, **kwargs):
+        self.args = kwargs
+        self.relpath = self.args.get("_relpath")
+        self.override_source_location = None
 
-        _vars = s.args.get("vars", {})
+        _vars = self.args.get("vars", {})
         for key, value in _vars.items():
             _vars[key] = listify(value)
-        s.args["vars"] = _vars
+        self.args["vars"] = _vars
 
     def post_parse():
         pass
 
-    def locate_source(s, filename):
-        if s.override_source_location:
-            res = os.path.join(s.override_source_location, filename)
+    def locate_source(self, filename):
+        if self.override_source_location:
+            res = os.path.join(self.override_source_location, filename)
         else:
-            res = os.path.join(s.relpath, filename)
+            res = os.path.join(self.relpath, filename)
         return res.rstrip("/") or "."
 
 
 class Context(Declaration):
     map = {}
 
-    def __init__(s, add_to_map=True, **kwargs):
+    def __init__(self, add_to_map=True, **kwargs):
         super().__init__(**kwargs)
 
-        s.name = kwargs.get("name")
-        s.parent = kwargs.get("parent")
-        s.children = []
-        s.modules = {}
-        s.vars = None
-        s.bindir = s.args.get("bindir", "${bindir}/${name}" if s.parent else "build")
+        self.name = kwargs.get("name")
+        self.parent = kwargs.get("parent")
+        self.children = []
+        self.modules = {}
+        self.vars = None
+        self.bindir = self.args.get("bindir", "${bindir}/${name}" if self.parent else "build")
 
         if add_to_map:
-            Context.map[s.name] = s
+            Context.map[self.name] = self
 
-        s.disabled_modules = set(kwargs.get("disable_modules", []))
+        self.disabled_modules = set(kwargs.get("disable_modules", []))
 
-        depends(s.name)
+        depends(self.name)
         # print("CONTEXT", s.name)
 
-    def __repr__(s, nest=False):
+    def __repr__(self, nest=False):
         res = "Context(" if not nest else ""
-        res += '"' + s.name + '"'
-        if s.parent:
-            res += "->" + s.parent.__repr__(nest=True)
+        res += '"' + self.name + '"'
+        if self.parent:
+            res += "->" + self.parent.__repr__(nest=True)
         else:
             res += ")"
         return res
@@ -265,50 +265,50 @@ class Context(Declaration):
                 context.parent.children.append(context)
                 depends(context.parent.name, name)
 
-    def get_module(s, module_name):
+    def get_module(self, module_name):
         #        print("get_module()", s, s.modules.keys())
-        if module_name in s.disabled_modules:
-            print("DISABLED_MODULE", s.name, module_name)
+        if module_name in self.disabled_modules:
+            print("DISABLED_MODULE", self.name, module_name)
             return None
-        module = s.modules.get(module_name)
-        if not module and s.parent:
-            return s.parent.get_module(module_name)
+        module = self.modules.get(module_name)
+        if not module and self.parent:
+            return self.parent.get_module(module_name)
         return module
 
-    def get_vars(s):
-        if s.vars:
+    def get_vars(self):
+        if self.vars:
             pass
-        elif s.parent:
+        elif self.parent:
             _vars = {}
-            pvars = s.parent.get_vars()
+            pvars = self.parent.get_vars()
             merge(_vars, copy.deepcopy(pvars), override=True, change_listorder=False)
-            merge(_vars, s.args.get("vars", {}), override=True, change_listorder=False)
-            s.vars = _vars
+            merge(_vars, self.args.get("vars", {}), override=True, change_listorder=False)
+            self.vars = _vars
         else:
-            s.vars = s.args.get("vars", {})
+            self.vars = self.args.get("vars", {})
 
-        return s.vars
+        return self.vars
 
-    def get_bindir(s):
-        if "$" in s.bindir:
-            _dict = defaultdict(lambda: "", name=s.name)
-            if s.parent:
-                _dict.update({"parent": s.parent.name, "bindir": s.parent.get_bindir()})
+    def get_bindir(self):
+        if "$" in self.bindir:
+            _dict = defaultdict(lambda: "", name=self.name)
+            if self.parent:
+                _dict.update({"parent": self.parent.name, "bindir": self.parent.get_bindir()})
 
-            s.bindir = Template(s.bindir).substitute(_dict)
-        return s.bindir
+            self.bindir = Template(self.bindir).substitute(_dict)
+        return self.bindir
 
-    def get_filepath(s, filename=None):
+    def get_filepath(self, filename=None):
         if filename is not None:
-            return os.path.join(s.get_bindir(), filename)
+            return os.path.join(self.get_bindir(), filename)
         else:
-            return s.get_bindir()
+            return self.get_bindir()
 
-    def listed(s, _set):
-        if s.name in _set:
+    def listed(self, _set):
+        if self.name in _set:
             return True
-        elif s.parent:
-            return s.parent.listed(_set)
+        elif self.parent:
+            return self.parent.listed(_set)
         else:
             return False
 
@@ -326,27 +326,27 @@ class Rule(Declaration):
     rule_cache = {}
     file_map = {}
 
-    def __init__(s, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        s.name = s.args["name"]
-        s.cmd = s.args["cmd"]
-        s.depfile = s.args.get("depfile")
-        s.deps = s.args.get("deps")
+        self.name = self.args["name"]
+        self.cmd = self.args["cmd"]
+        self.depfile = self.args.get("depfile")
+        self.deps = self.args.get("deps")
 
         try:
-            in_ext = s.args["in"]
+            in_ext = self.args["in"]
             if in_ext in Rule.rule_map:
                 print("error: %s extension already taken")
                 return
-            Rule.rule_map[in_ext] = s
+            Rule.rule_map[in_ext] = self
         except KeyError:
             pass
 
-        Rule.rule_name_map[s.name] = s
+        Rule.rule_name_map[self.name] = self
 
-        s.create_var_list()
+        self.create_var_list()
         global writer
-        s.to_ninja(writer)
+        self.to_ninja(writer)
 
     def get_by_extension(filename):
         filename, file_extension = os.path.splitext(filename)
@@ -355,26 +355,26 @@ class Rule(Declaration):
     def get_by_name(name):
         return Rule.rule_name_map[name]
 
-    def create_var_list(s):
-        _var_names = Rule.rule_var_re.findall(s.cmd)
+    def create_var_list(self):
+        _var_names = Rule.rule_var_re.findall(self.cmd)
         var_names = []
         for name in _var_names:
             name = name[2:-1]
             if not name in {"in", "out"}:
                 var_names.append(name)
         # print("RULE", s.name, "vars:", var_names)
-        s.var_list = var_names
+        self.var_list = var_names
 
-    def to_ninja(s, writer):
+    def to_ninja(self, writer):
         writer.rule(
-            s.name,
-            s.cmd,
-            description="%s ${out}" % s.name,
-            deps=s.deps,
-            depfile=s.depfile,
+            self.name,
+            self.cmd,
+            description="%s ${out}" % self.name,
+            deps=self.deps,
+            depfile=self.depfile,
         )
 
-    def process_var_options(s, name, data):
+    def process_var_options(self, name, data):
         """ interpret smart options.
 
         Use like e.g.,
@@ -386,7 +386,7 @@ class Rule(Declaration):
         [ "include/foo", "include/bar" ] -> "-Iinclude/foo -Iinclude/bar"
         """
 
-        opts = s.args["var_options"][name]
+        opts = self.args["var_options"][name]
 
         joiner = opts.get("joiner", " ")
         prefix = opts.get("prefix", "")
@@ -400,7 +400,7 @@ class Rule(Declaration):
             + end
         )
 
-    def to_ninja_build(s, writer, _in, _out, _vars=None):
+    def to_ninja_build(self, writer, _in, _out, _vars=None):
         def control_key(x):
             """ var sort helper key function
 
@@ -418,11 +418,11 @@ class Rule(Declaration):
         _vars = _vars or {}
         # print("RULE", s.name, _in, _out, _vars)
         vars = {}
-        for name in s.var_list:
+        for name in self.var_list:
             try:
                 data = _vars[name]
                 try:
-                    data = s.process_var_options(name, data)
+                    data = self.process_var_options(name, data)
                 except KeyError:
                     if type(data) == list:
                         data.sort(key=control_key)
@@ -434,7 +434,7 @@ class Rule(Declaration):
                 pass
 
         cache_key = hash(
-            "rule:%s in:%s vars:%s" % (s.name, _in, hash(frozenset(vars.items())))
+            "rule:%s in:%s vars:%s" % (self.name, _in, hash(frozenset(vars.items())))
         )
 
         Rule.rule_num += 1
@@ -447,7 +447,7 @@ class Rule(Declaration):
         except KeyError:
             Rule.rule_cache[cache_key] = _out
             # print("laze: NOCACHE: %s %s ->  %s" % (s.name, _in, _out), vars)
-            writer.build(outputs=_out, rule=s.name, inputs=_in, variables=vars)
+            writer.build(outputs=_out, rule=self.name, inputs=_in, variables=vars)
             return _out
 
 
@@ -478,42 +478,42 @@ transtab = str.maketrans(_in, _out)
 
 class Module(Declaration):
     class NotAvailable(Exception):
-        def __init__(s, context, module, dependency):
-            s.context = context
-            s.module = module
-            s.dependency = dependency
+        def __init__(self, context, module, dependency):
+            self.context = context
+            self.module = module
+            self.dependency = dependency
 
-        def __str__(s):
+        def __str__(self):
             return '%s in %s depends on unavailable module "%s"' % (
-                s.module,
-                s.context,
-                s.dependency,
+                self.module,
+                self.context,
+                self.dependency,
             )
 
     list = []
 
-    def __init__(s, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        Module.list.append(s)
-        s.name = s.args.get("name")
-        if not s.name:
-            if s.relpath:
-                s.name = os.path.dirname(s.relpath + "/")
+        Module.list.append(self)
+        self.name = self.args.get("name")
+        if not self.name:
+            if self.relpath:
+                self.name = os.path.dirname(self.relpath + "/")
             else:
                 raise InvalidArgument("module missing name")
-            s.args["name"] = s.name
+            self.args["name"] = self.name
 
-        uses = dict_get(s.args, "uses", [])
+        uses = dict_get(self.args, "uses", [])
         list_remove(uses)
-        list_remove(s.args.get("depends"))
+        list_remove(self.args.get("depends"))
 
-        for name in listify(s.args.get("depends")):
+        for name in listify(self.args.get("depends")):
             if name.startswith("?"):
                 uses.append(name[1:])
 
-        s.context = None
-        s.get_nested_cache = {}
-        s.export_vars = {}
+        self.context = None
+        self.get_nested_cache = {}
+        self.export_vars = {}
 
     def post_parse():
         for module in Module.list:
@@ -529,21 +529,21 @@ class Module(Declaration):
             # print("MODULE", module.name, "in", context)
             module.handle_download(module.args.get("download"))
 
-    def handle_download(s, download):
+    def handle_download(self, download):
         if download:
-            dldir = os.path.join(".laze", "dl", s.relpath, s.name)
-            print("DOWNLOAD", s.name, download, dldir)
-            s.override_source_location = dldir
+            dldir = os.path.join(".laze", "dl", self.relpath, self.name)
+            print("DOWNLOAD", self.name, download, dldir)
+            self.override_source_location = dldir
             dl.add_to_queue(download, dldir)
 
-    def get_nested(s, context, name, notfound_error=True):
+    def get_nested(self, context, name, notfound_error=True):
         try:
             # print("get_nested(%s) returning cache " % name, s.name, [ x.name for x in s.get_nested_cache[context][name][s]])
-            return s.get_nested_cache[context][name][s]
+            return self.get_nested_cache[context][name][self]
         except KeyError:
             pass
 
-        module_names = set(listify(s.args.get(name, [])))
+        module_names = set(listify(self.args.get(name, [])))
         modules = set()
         all_module_names = set()
         while module_names:
@@ -560,7 +560,7 @@ class Module(Declaration):
                 module = context.get_module(module_name)
                 if not module:
                     if notfound_error and not optional:
-                        raise Module.NotAvailable(context, s.name, module_name)
+                        raise Module.NotAvailable(context, self.name, module_name)
                     print("NOTFOUND", context, module_name)
                     continue
 
@@ -582,52 +582,52 @@ class Module(Declaration):
         res = sorted(list(modules), key=lambda x: x.name)
 
         # print("get_nested(%s) setting cache" % name, { s.name : [x.name for x in res] })
-        tmp = dict_get(s.get_nested_cache, context, {})
-        merge(tmp, {name: {s: res}})
+        tmp = dict_get(self.get_nested_cache, context, {})
+        merge(tmp, {name: {self: res}})
 
         return res
 
-    def get_deps(s, context):
-        return uniquify(s.get_nested(context, "depends"))
+    def get_deps(self, context):
+        return uniquify(self.get_nested(context, "depends"))
 
-    def get_used(s, context, all=False):
+    def get_used(self, context, all=False):
         res = []
-        res.extend(s.get_nested(context, "uses", notfound_error=False))
+        res.extend(self.get_nested(context, "uses", notfound_error=False))
 
-        for dep in s.get_nested(context, "depends", notfound_error=False):
+        for dep in self.get_nested(context, "depends", notfound_error=False):
             res.extend(dep.get_nested(context, "uses", notfound_error=False))
             if all:
                 res.append(dep)
         return uniquify(res)
 
-    def get_vars(s, context):
-        vars = s.args.get("vars", {})
+    def get_vars(self, context):
+        vars = self.args.get("vars", {})
         if vars:
             _vars = copy.deepcopy(context.get_vars())
-            _vars = s.vars_substitute(_vars, context)
+            _vars = self.vars_substitute(_vars, context)
 
             merge(_vars, vars, override=True)
             return _vars
         else:
             return copy.deepcopy(context.get_vars())
 
-    def get_export_vars(s, context, module_set):
+    def get_export_vars(self, context, module_set):
         try:
-            return s.export_vars[context]
+            return self.export_vars[context]
         except KeyError:
             pass
 
-        vars = s.args.get("export_vars", {})
-        vars = s.vars_substitute(vars, context)
+        vars = self.args.get("export_vars", {})
+        vars = self.vars_substitute(vars, context)
 
-        for dep in s.get_used(context, all=True):
+        for dep in self.get_used(context, all=True):
             if dep.name in module_set:
                 dep_export_vars = dep.args.get("export_vars", {})
                 if dep_export_vars:
                     dep_export_vars = dep.vars_substitute(dep_export_vars, context)
                     merge(vars, dep_export_vars, join_lists=True)
 
-        s.export_vars[context] = vars
+        self.export_vars[context] = vars
         return vars
 
     def vars_substitute(self, vars, context):
@@ -644,14 +644,14 @@ class Module(Declaration):
 
         return vars
 
-    def uses_all(s):
-        return "all" in listify(s.args.get("uses", []))
+    def uses_all(self):
+        return "all" in listify(self.args.get("uses", []))
 
-    def get_defines(s, context, module_set):
-        if s.uses_all():
+    def get_defines(self, context, module_set):
+        if self.uses_all():
             deps_available = module_set
         else:
-            dep_names = set([x.name for x in s.get_used(context)])
+            dep_names = set([x.name for x in self.get_used(context)])
             deps_available = dep_names & module_set
 
         dep_defines = []
@@ -669,20 +669,20 @@ class App(Module):
     global_whitelist = set()
     global_blacklist = set()
 
-    def __init__(s, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        s.__class__.list.append(s)
+        self.__class__.list.append(self)
 
-        s.bindir = s.args.get("bindir", os.path.join("${bindir}", "${name}"))
+        self.bindir = self.args.get("bindir", os.path.join("${bindir}", "${name}"))
 
-        def _list(s, name):
+        def _list(self, name):
             return (
-                set(listify(s.args.get(name, []))) | App.__dict__["global_" + name]
+                set(listify(self.args.get(name, []))) | App.__dict__["global_" + name]
                 or None
             )
 
-        s.whitelist = _list(s, "whitelist")
-        s.blacklist = _list(s, "blacklist")
+        self.whitelist = _list(self, "whitelist")
+        self.blacklist = _list(self, "blacklist")
 
         # print("APP_", s.name, "path:", s.relpath)
 
@@ -690,55 +690,55 @@ class App(Module):
         for app in App.list:
             app.build()
 
-    def build(s):
-        if App.global_applist and not s.name in App.global_applist:
+    def build(self):
+        if App.global_applist and not self.name in App.global_applist:
             return
 
-        print("APP", s.name)
+        print("APP", self.name)
 
         for name, builder in Context.map.items():
             if builder.__class__ != Builder:
                 continue
 
-            if s.whitelist and not builder.listed(s.whitelist):
-                print("NOT WHITELISTED:", s.name, builder.name)
+            if self.whitelist and not builder.listed(self.whitelist):
+                print("NOT WHITELISTED:", self.name, builder.name)
                 continue
 
-            if s.blacklist and builder.listed(s.blacklist):
-                print("BLACKLISTED:", s.name, builder.name)
+            if self.blacklist and builder.listed(self.blacklist):
+                print("BLACKLISTED:", self.name, builder.name)
                 continue
 
             #
             context = Context(
                 add_to_map=False,
-                name=s.name,
+                name=self.name,
                 parent=builder,
-                vars=s.args.get("vars", {}),
+                vars=self.args.get("vars", {}),
             )
 
             #
-            context.bindir = s.bindir
+            context.bindir = self.bindir
             if "$" in context.bindir:
                 context.bindir = Template(context.bindir).substitute(
                     {
                         "bindir": builder.get_bindir(),
-                        "name": s.name,
-                        "app": s.name,
+                        "name": self.name,
+                        "app": self.name,
                         "builder": name,
                     }
                 )
             if context.bindir.startswith("./"):
-                context.bindir = os.path.join(s.relpath, context.bindir[2:])
+                context.bindir = os.path.join(self.relpath, context.bindir[2:])
 
             context_vars = context.get_vars()
 
-            print("  build", s.name, "for", name)
+            print("  build", self.name, "for", name)
             try:
-                modules = [s] + uniquify(s.get_deps(context))
+                modules = [self] + uniquify(self.get_deps(context))
             except Module.NotAvailable as e:
                 print(
                     "laze: WARNING: skipping app",
-                    s.name,
+                    self.name,
                     "for builder %s:" % context.parent.name,
                     e,
                 )
@@ -814,13 +814,15 @@ class App(Module):
                     source_in = module.locate_source(source)
                     rule = Rule.get_by_extension(source)
 
-                    obj = context.get_filepath(os.path.join(module.relpath, source[:-2] + rule.args.get("out")))
+                    obj = context.get_filepath(
+                        os.path.join(module.relpath, source[:-2] + rule.args.get("out"))
+                    )
                     obj = rule.to_ninja_build(writer, source_in, obj, module_vars)
                     objects.append(obj)
                     # print ( source) # , module.get_vars(context), rule.name)
 
             link = Rule.get_by_name("LINK")
-            outfile = context.get_filepath(os.path.basename(s.name)) + ".elf"
+            outfile = context.get_filepath(os.path.basename(self.name)) + ".elf"
 
             res = link.to_ninja_build(writer, objects, outfile, context.get_vars())
             if res != outfile:
@@ -831,7 +833,7 @@ class App(Module):
                 symlink.to_ninja_build(writer, res, outfile)
 
             depends(context.parent.name, outfile)
-            depends(s.name, outfile)
+            depends(self.name, outfile)
 
 
 class_map = {
