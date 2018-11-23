@@ -3,7 +3,7 @@ import subprocess
 import json
 
 from laze.common import InvalidArgument
-from shutil import rmtree
+from shutil import rmtree, copytree
 
 
 queue = {}
@@ -70,8 +70,8 @@ def start():
                 error = True
 
         elif type(source) == dict:
-            git = source.get("git")
-            if git is not None:
+            if "git" in source:
+                git = source.get("git")
                 url = git.get("url")
                 if url is None:
                     raise InvalidArgument(
@@ -79,6 +79,19 @@ def start():
                     )
                 commit = git.get("commit")
                 git_clone(url, target, commit)
+            elif "local" in source:
+                local = source["local"]
+                path = local.get("path")
+                if path is None:
+                    raise InvalidArgument(
+                        "laze: error: local download source %s is missing path"
+                    )
+                try:
+                    rmtree(target)
+                except FileNotFoundError:
+                    pass
+
+                copytree(path, target)
             else:
                 error = True
 
