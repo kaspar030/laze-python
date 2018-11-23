@@ -1,0 +1,37 @@
+# define some rules.
+rule:
+    - name: CC
+      in: '.c'
+      out: '.o'
+      depfile: "$out.d"
+      deps: gcc
+      cmd: 'ccache ${CC} -MMD -MF $out.d ${CFLAGS} -c ${in} -o ${out}'
+    - name: ASM
+      in: '.S'
+      out: '.o'
+      cmd: '${CC} ${CFLAGS} -c ${in} -o ${out}'
+    - name: LINK
+      in: '.o'
+      options:
+          combine: true
+      cmd: '${LINK} ${LINKFLAGS} ${CFLAGS} ${in} ${libs} -o ${out}'
+
+    - name: SYMLINK
+      cmd: 'ln -f ${in} ${out}'
+
+# create a default context
+context:
+    - name: default
+      vars:
+          CFLAGS:
+            - -Wall
+            - -Os
+            - -g
+
+# create a builder context with the default context as parent
+builder:
+    - name: host
+      parent: default
+      vars:
+          CC: gcc
+          LINK: gcc

@@ -35,6 +35,10 @@ short_module_defines = True
 BUILDFILE_NAME = "laze.yml"
 
 
+def get_data_folder():
+    return os.path.join(os.path.dirname(__file__), "data")
+
+
 def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
     def do_include(data):
         includes = listify(data.get("include"))
@@ -155,28 +159,38 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
             # print("IMPORTS:", imports)
             imported_list = []
             imports_as_dicts = []
+
+            # unify all imports so they have the form
+            # (importer_filename, import name or URL, possible dictionary)
             for _import_tuple in imports:
                 importer_filename, _import = _import_tuple
                 if type(_import) is dict:
                     for k, v in _import.items():
                         imports_as_dicts.append((importer_filename, k, v))
                 else:
-                    imports_as_dicts.append((importer_filename, _import, None))
+                    imports_as_dicts.append((importer_filename, _import, {}))
 
             for _import_tuple in imports_as_dicts:
                 importer_filename, name, import_dict = _import_tuple
-                if import_dict is not None:
-                    url = import_dict.get("url")
-                    version = import_dict.get("version")
-                else:
-                    url = None
-                    version = None
+
+                url = import_dict.get("url")
+                version = import_dict.get("version")
+                folder_override = import_dict.get("folder_override")
 
                 if url is None:
                     url = name
                     name = os.path.basename(name)
 
-                dl_source = {"git": {"url": url}}
+                if url.startswith("$laze/"):
+                    dl_source = {
+                        "local": {
+                            "path": os.path.join(
+                                get_data_folder(), url[len("$laze/") :]
+                            )
+                        }
+                    }
+                else:
+                    dl_source = {"git": {"url": url}}
 
                 folder = os.path.join(".laze/imports", name)
                 if version is not None:
@@ -185,8 +199,16 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
                 else:
                     folder = os.path.join(folder, "latest")
 
+                if folder_override is None:
+                    dl.add_to_queue(dl_source, folder)
+                else:
+                    folder = folder_override
+
+                subdir = import_dict.get("subdir")
+                if subdir is not None:
+                    folder = os.path.join(folder, subdir)
+
                 imported_list.append((name, importer_filename, folder))
-                dl.add_to_queue(dl_source, folder)
 
             dl.start()
 
@@ -239,7 +261,9 @@ class Context(Declaration):
         self.children = []
         self.modules = {}
         self.vars = None
-        self.bindir = self.args.get("bindir", "${bindir}/${name}" if self.parent else "build")
+        self.bindir = self.args.get(
+            "bindir", "${bindir}/${name}" if self.parent else "build"
+        )
 
         if add_to_map:
             Context.map[self.name] = self
@@ -282,7 +306,9 @@ class Context(Declaration):
             _vars = {}
             pvars = self.parent.get_vars()
             merge(_vars, copy.deepcopy(pvars), override=True, change_listorder=False)
-            merge(_vars, self.args.get("vars", {}), override=True, change_listorder=False)
+            merge(
+                _vars, self.args.get("vars", {}), override=True, change_listorder=False
+            )
             self.vars = _vars
         else:
             self.vars = self.args.get("vars", {})
@@ -293,7 +319,9 @@ class Context(Declaration):
         if "$" in self.bindir:
             _dict = defaultdict(lambda: "", name=self.name)
             if self.parent:
-                _dict.update({"parent": self.parent.name, "bindir": self.parent.get_bindir()})
+                _dict.update(
+                    {"parent": self.parent.name, "bindir": self.parent.get_bindir()}
+                )
 
             self.bindir = Template(self.bindir).substitute(_dict)
         return self.bindir
@@ -533,7 +561,16 @@ class Module(Declaration):
         if download:
             dldir = os.path.join(".laze", "dl", self.relpath, self.name)
             print("DOWNLOAD", self.name, download, dldir)
+
+            # handle possibly passed subdir parameter
+            if type(download) == dict:
+                subdir = download.get("subdir")
+                if subdir:
+                    dldir = os.path.join(dldir, subdir)
+
+            # make "locate_source()" return filenames in downloaded folder/[subdir/]
             self.override_source_location = dldir
+
             dl.add_to_queue(download, dldir)
 
     def get_nested(self, context, name, notfound_error=True):

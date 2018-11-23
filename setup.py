@@ -63,4 +63,6 @@ setup(
             'laze=laze.laze:cli',
         ],
     },
+    include_package_data=True,
+    zip_safe=False,
 )
