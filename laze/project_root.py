@@ -1,16 +1,8 @@
-import laze.constants as const
+import os
 
-class InvalidArgument(Exception):
-    pass
-
-
-class ParseError(Exception):
-    pass
-
+from laze.constants import PROJECTFILE_NAME as project_filename
 
 def locate_project_root():
-    project_filename = const.PROJECT_FILENAME
-
     while True:
         cwd = os.getcwd()
         if os.path.isfile(project_filename):

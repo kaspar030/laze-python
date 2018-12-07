@@ -30,6 +30,8 @@ import laze.dl as dl
 
 from laze.common import ParseError, InvalidArgument
 import laze.constants as const
+from laze.project_root import locate_project_root
+
 
 files_set = set()
 short_module_defines = True
@@ -874,24 +876,42 @@ class_map = {
 
 @click.command()
 @click.option(
-    "--buildfile",
+    "--chdir",
+    "-C",
+    type=click.STRING,
+)
+@click.option(
+    "--project-file",
     "-f",
     type=click.STRING,
-    default=const.BUILDFILE_NAME,
-    envvar="LAZE_BUILDFILE",
+    envvar="LAZE_PROJECT_FILE",
 )
 @click.option("--whitelist", "-W", multiple=True, envvar="LAZE_WHITELIST")
 @click.option("--apps", "-A", multiple=True, envvar="LAZE_APPS")
-def generate(buildfile, whitelist, apps):
+def generate(chdir, project_file, whitelist, apps):
     global writer
+
+    if chdir:
+        os.chdir(chdir)
 
     App.global_whitelist = set(split(list(whitelist)))
     App.global_blacklist = set()  # set(split(list(blacklist or [])))
     App.global_applist = set(split(list(apps)))
 
+    start_dir = os.getcwd()
+
+    if project_file is None:
+        project_file = const.PROJECTFILE_NAME
+        project_root = locate_project_root()
+        if project_root is None:
+            print("laze: error: could not locate folder containing \"%s\"" %
+                    project_file)
+
+            sys.exit(1)
+
     before = time.time()
     try:
-        data_list = yaml_load(buildfile)
+        data_list = yaml_load(project_file)
     except ParseError as e:
         print(e)
         sys.exit(1)
@@ -903,10 +923,10 @@ def generate(buildfile, whitelist, apps):
 
     # create rule for automatically re-running laze if necessary
     writer.rule(
-        "relaze", "laze generate --buildfile ${in}", restat=True, generator=True
+        "relaze", "laze generate --project-file ${in}", restat=True, generator=True
     )
     writer.build(
-        rule="relaze", outputs="build.ninja", implicit=list(files_set), inputs=buildfile
+        rule="relaze", outputs="build.ninja", implicit=list(files_set), inputs=project_file
     )
 
     before = time.time()
