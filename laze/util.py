@@ -2,6 +2,7 @@ import traceback
 from itertools import product
 import hashlib
 import json
+from string import Template
 
 
 def listify(something):
@@ -67,6 +68,23 @@ def deep_replace(obj, replace):
     else:
         return obj
 
+
+def deep_substitute(_vars, _dict):
+    """ for each key in vars, do Template substitution
+
+    if value is a list, substitute each list member.
+    """
+
+    for k, v in _vars.items():
+        if type(v) == list:
+            for n, entry in enumerate(v):
+                if "$" in entry:
+                    v[n] = Template(entry).substitute(_dict)
+        else:
+            if "$" in v:
+                _vars[k] = Template(v).substitute(_dict)
+
+    return _vars
 
 def merge(
     a,

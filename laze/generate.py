@@ -19,6 +19,7 @@ from .util import (
     dict_list_product,
     uniquify,
     deep_replace,
+    deep_substitute,
     dict_get,
     static_vars,
     split,
@@ -665,19 +666,9 @@ class Module(Declaration):
         self.export_vars[context] = vars
         return vars
 
-    def vars_substitute(self, vars, context):
+    def vars_substitute(self, _vars, context):
         _dict = {"source_folder": self.locate_source("")}
-        for k, v in vars.items():
-            if type(v) == list:
-                for n, entry in enumerate(v):
-                    if "$" in entry:
-                        v[n] = Template(entry).substitute(_dict)
-                        print("entry:", k, v, entry, _dict)
-            else:
-                if "$" in v:
-                    vars[k] = Template(v).substitute(_dict)
-
-        return vars
+        return deep_substitute(_vars, _dict)
 
     def uses_all(self):
         return "all" in listify(self.args.get("uses", []))
