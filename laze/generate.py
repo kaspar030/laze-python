@@ -29,6 +29,7 @@ from ninja_syntax import Writer
 import laze.dl as dl
 
 from laze.common import ParseError, InvalidArgument
+import laze.constants as const
 
 files_set = set()
 short_module_defines = True
@@ -739,7 +740,7 @@ class App(Module):
                 add_to_map=False,
                 name=self.name,
                 parent=builder,
-                vars=self.args.get("vars", {}),
+                vars={}
             )
 
             #
