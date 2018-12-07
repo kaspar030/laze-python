@@ -876,11 +876,6 @@ class_map = {
 
 @click.command()
 @click.option(
-    "--chdir",
-    "-C",
-    type=click.STRING,
-)
-@click.option(
     "--project-file",
     "-f",
     type=click.STRING,
@@ -888,11 +883,8 @@ class_map = {
 )
 @click.option("--whitelist", "-W", multiple=True, envvar="LAZE_WHITELIST")
 @click.option("--apps", "-A", multiple=True, envvar="LAZE_APPS")
-def generate(chdir, project_file, whitelist, apps):
+def generate(project_file, whitelist, apps):
     global writer
-
-    if chdir:
-        os.chdir(chdir)
 
     App.global_whitelist = set(split(list(whitelist)))
     App.global_blacklist = set()  # set(split(list(blacklist or [])))
