@@ -32,8 +32,6 @@ from laze.common import ParseError, InvalidArgument
 files_set = set()
 short_module_defines = True
 
-BUILDFILE_NAME = "laze.yml"
-
 
 def get_data_folder():
     return os.path.join(os.path.dirname(__file__), "data")
@@ -146,7 +144,7 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
                 relpath = os.path.join(path, subdir)
                 res.extend(
                     yaml_load(
-                        os.path.join(relpath, BUILDFILE_NAME),
+                        os.path.join(relpath, const.BUILDFILE_NAME),
                         path=relpath,
                         defaults=_defaults,
                         parent=filename,
@@ -218,7 +216,7 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
                 name, importer_filename, folder = imported
                 res.extend(
                     yaml_load(
-                        os.path.join(folder, BUILDFILE_NAME),
+                        os.path.join(folder, const.BUILDFILE_NAME),
                         path=folder,
                         parent=importer_filename,
                         imports=imports,
@@ -887,7 +885,7 @@ class_map = {
     "--buildfile",
     "-f",
     type=click.STRING,
-    default=BUILDFILE_NAME,
+    default=const.BUILDFILE_NAME,
     envvar="LAZE_BUILDFILE",
 )
 @click.option("--whitelist", "-W", multiple=True, envvar="LAZE_WHITELIST")
