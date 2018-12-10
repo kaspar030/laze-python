@@ -741,12 +741,7 @@ class App(Module):
                 continue
 
             #
-            context = Context(
-                add_to_map=False,
-                name=self.name,
-                parent=builder,
-                vars={}
-            )
+            context = Context(add_to_map=False, name=self.name, parent=builder, vars={})
 
             #
             context.bindir = self.bindir
@@ -899,8 +894,7 @@ def generate(project_file, whitelist, apps):
         project_file = const.PROJECTFILE_NAME
         project_root = locate_project_root()
         if project_root is None:
-            print("laze: error: could not locate folder containing \"%s\"" %
-                    project_file)
+            print('laze: error: could not locate folder containing "%s"' % project_file)
 
             sys.exit(1)
 
