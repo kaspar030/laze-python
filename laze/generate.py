@@ -334,8 +334,10 @@ class Context(Declaration):
         else:
             return self.get_bindir()
 
-    def listed(self, _set):
-        if self.name in _set:
+    def listed(self, _set, empty_val=False):
+        if not _set:
+            return empty_val
+        elif self.name in _set:
             return True
         elif self.parent:
             return self.parent.listed(_set)
@@ -705,13 +707,11 @@ class App(Module):
         self.bindir = self.args.get("bindir", os.path.join("${bindir}", "${name}"))
 
         def _list(self, name):
-            return (
-                set(listify(self.args.get(name, []))) | App.__dict__["global_" + name]
-                or None
-            )
+            return set(listify(self.args.get(name, [])))
 
         self.whitelist = _list(self, "whitelist")
-        self.blacklist = _list(self, "blacklist")
+
+        self.blacklist = _list(self, "blacklist") | App.global_blacklist
 
         # print("APP_", s.name, "path:", s.relpath)
 
@@ -729,11 +729,14 @@ class App(Module):
             if builder.__class__ != Builder:
                 continue
 
-            if self.whitelist and not builder.listed(self.whitelist):
+            if not (
+                builder.listed(self.whitelist, empty_val=True)
+                and builder.listed(App.global_whitelist, empty_val=True)
+            ):
                 print("NOT WHITELISTED:", self.name, builder.name)
                 continue
 
-            if self.blacklist and builder.listed(self.blacklist):
+            if builder.listed(self.blacklist):
                 print("BLACKLISTED:", self.name, builder.name)
                 continue
 
