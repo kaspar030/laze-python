@@ -873,18 +873,13 @@ class_map = {
 
 
 @click.command()
-@click.option(
-    "--project-file",
-    "-f",
-    type=click.STRING,
-    envvar="LAZE_PROJECT_FILE",
-)
-@click.option("--whitelist", "-W", multiple=True, envvar="LAZE_WHITELIST")
-@click.option("--apps", "-A", multiple=True, envvar="LAZE_APPS")
-def generate(project_file, whitelist, apps):
+@click.option("--project-file", "-f", type=click.STRING, envvar="LAZE_PROJECT_FILE")
+@click.option("--builders", "-b", multiple=True, envvar="LAZE_BUILDERS")
+@click.option("--apps", "-a", multiple=True, envvar="LAZE_APPS")
+def generate(project_file, builders, apps):
     global writer
 
-    App.global_whitelist = set(split(list(whitelist)))
+    App.global_whitelist = set(split(list(builders)))
     App.global_blacklist = set()  # set(split(list(blacklist or [])))
     App.global_applist = set(split(list(apps)))
 
@@ -911,11 +906,20 @@ def generate(project_file, whitelist, apps):
     #
 
     # create rule for automatically re-running laze if necessary
-    writer.rule(
-        "relaze", "laze generate --project-file ${in}", restat=True, generator=True
-    )
+    relaze_rule = "laze generate --project-file ${in}"
+    if builders:
+        relaze_rule += " --builders "
+        relaze_rule += ",".join(list(builders))
+    if apps:
+        relaze_rule += " --apps "
+        relaze_rule += ",".join(list(apps))
+
+    writer.rule("relaze", relaze_rule, restat=True, generator=True)
     writer.build(
-        rule="relaze", outputs="build.ninja", implicit=list(files_set), inputs=project_file
+        rule="relaze",
+        outputs="build.ninja",
+        implicit=list(files_set),
+        inputs=project_file,
     )
 
     before = time.time()
