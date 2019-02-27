@@ -28,9 +28,9 @@ from .util import (
 from ninja_syntax import Writer
 import laze.dl as dl
 
-from laze.common import ParseError, InvalidArgument
+from laze.common import ParseError, InvalidArgument, determine_dirs
+from laze.debug import dprint
 import laze.constants as const
-from laze.project_root import locate_project_root
 
 
 files_set = set()
@@ -264,7 +264,8 @@ class Context(Declaration):
         self.modules = {}
         self.vars = None
         self.bindir = self.args.get(
-            "bindir", "${bindir}/${name}" if self.parent else "build"
+            "bindir",
+            "${bindir}/${name}" if self.parent else kwargs.get("_builddir_rel"),
         )
 
         if add_to_map:
@@ -876,22 +877,19 @@ class_map = {
 @click.option("--project-file", "-f", type=click.STRING, envvar="LAZE_PROJECT_FILE")
 @click.option("--builders", "-b", multiple=True, envvar="LAZE_BUILDERS")
 @click.option("--apps", "-a", multiple=True, envvar="LAZE_APPS")
-def generate(project_file, builders, apps):
+@click.option(
+    "--build-dir", "-B", type=click.STRING, default="build", envvar="LAZE_BUILDDIR"
+)
+def generate(project_file, builders, apps, build_dir):
     global writer
 
     App.global_whitelist = set(split(list(builders)))
     App.global_blacklist = set()  # set(split(list(blacklist or [])))
     App.global_applist = set(split(list(apps)))
 
-    start_dir = os.getcwd()
-
-    if project_file is None:
-        project_file = const.PROJECTFILE_NAME
-        project_root = locate_project_root()
-        if project_root is None:
-            print('laze: error: could not locate folder containing "%s"' % project_file)
-
-            sys.exit(1)
+    start_dir, build_dir, build_dir_rel, project_root, project_file = determine_dirs(
+        project_file, build_dir
+    )
 
     before = time.time()
     try:
@@ -902,8 +900,10 @@ def generate(project_file, builders, apps):
 
     print("laze: loading buildfiles took %.2fs" % (time.time() - before))
 
-    writer = Writer(open("build.ninja", "w"))
+    ninja_build_file = os.path.join(build_dir, "build.ninja")
+    writer = Writer(open(ninja_build_file, "w"))
     #
+    writer.variable("builddir", os.path.relpath(build_dir, start=project_root))
 
     # create rule for automatically re-running laze if necessary
     relaze_rule = "laze generate --project-file ${in}"
@@ -917,7 +917,7 @@ def generate(project_file, builders, apps):
     writer.rule("relaze", relaze_rule, restat=True, generator=True)
     writer.build(
         rule="relaze",
-        outputs="build.ninja",
+        outputs=ninja_build_file,
         implicit=list(files_set),
         inputs=project_file,
     )
@@ -931,6 +931,7 @@ def generate(project_file, builders, apps):
             datas = listify(data.get(name, []))
             for _data in datas:
                 _data["_relpath"] = relpath
+                _data["_builddir_rel"] = build_dir_rel
                 _class(**_data)
 
     no_post_parse_classes = {Builder}

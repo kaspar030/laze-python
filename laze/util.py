@@ -86,6 +86,7 @@ def deep_substitute(_vars, _dict):
 
     return _vars
 
+
 def merge(
     a,
     b,

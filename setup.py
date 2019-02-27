@@ -57,7 +57,7 @@ setup(
 
     keywords='build tool',
     packages=[PACKAGE],
-    install_requires=['click', 'pyyaml', 'ninja_syntax'],
+    install_requires=['click', 'pyyaml', 'ninja_syntax', 'click_default_group'],
     entry_points={
         'console_scripts': [
             'laze=laze.laze:cli',
