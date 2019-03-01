@@ -38,19 +38,28 @@ def determine_builddir(path, start_dir, project_root):
     return path
 
 
-def determine_dirs(project_file, build_dir):
+def determine_dirs(project_file, project_root, build_dir):
     start_dir = os.getcwd()
+
+    if project_root:
+        project_root = os.path.abspath(project_root)
 
     if project_file is None:
         project_file = const.PROJECTFILE_NAME
-        project_root = locate_project_root()
+        project_root = project_root or locate_project_root()
         if project_root is None:
             print('laze: error: could not locate folder containing "%s"' % project_file)
 
             sys.exit(1)
+    else:
+        project_file = os.path.abspath(project_file)
+        project_root = project_root or os.path.dirname(project_file)
+        dprint("verbose", 'laze: using project root "%s"' % project_root)
+
+    project_file = os.path.relpath(project_file, project_root)
 
     build_dir = determine_builddir(build_dir, start_dir, project_root)
-    build_dir_rel = os.path.relpath(build_dir, project_root)
     dprint("verbose", 'laze: using build dir "%s"' % build_dir)
+    build_dir = os.path.relpath(build_dir, project_root)
 
-    return start_dir, build_dir, build_dir_rel, project_root, project_file
+    return start_dir, build_dir, project_root, project_file

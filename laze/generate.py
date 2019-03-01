@@ -265,7 +265,7 @@ class Context(Declaration):
         self.vars = None
         self.bindir = self.args.get(
             "bindir",
-            "${bindir}/${name}" if self.parent else kwargs.get("_builddir_rel"),
+            "${bindir}/${name}" if self.parent else kwargs.get("_builddir"),
         )
 
         if add_to_map:
@@ -875,21 +875,24 @@ class_map = {
 
 @click.command()
 @click.option("--project-file", "-f", type=click.STRING, envvar="LAZE_PROJECT_FILE")
+@click.option("--project-root", "-r", type=click.STRING, envvar="LAZE_PROJECT_ROOT")
 @click.option("--builders", "-b", multiple=True, envvar="LAZE_BUILDERS")
 @click.option("--apps", "-a", multiple=True, envvar="LAZE_APPS")
 @click.option(
     "--build-dir", "-B", type=click.STRING, default="build", envvar="LAZE_BUILDDIR"
 )
-def generate(project_file, builders, apps, build_dir):
+def generate(project_file, project_root, builders, apps, build_dir):
     global writer
 
     App.global_whitelist = set(split(list(builders)))
     App.global_blacklist = set()  # set(split(list(blacklist or [])))
     App.global_applist = set(split(list(apps)))
 
-    start_dir, build_dir, build_dir_rel, project_root, project_file = determine_dirs(
-        project_file, build_dir
+    start_dir, build_dir, project_root, project_file = determine_dirs(
+        project_file, project_root, build_dir
     )
+
+    os.chdir(project_root)
 
     before = time.time()
     try:
@@ -903,7 +906,7 @@ def generate(project_file, builders, apps, build_dir):
     ninja_build_file = os.path.join(build_dir, "build.ninja")
     writer = Writer(open(ninja_build_file, "w"))
     #
-    writer.variable("builddir", os.path.relpath(build_dir, start=project_root))
+    writer.variable("builddir", build_dir)
 
     # create rule for automatically re-running laze if necessary
     relaze_rule = "laze generate --project-file ${in}"
@@ -919,7 +922,7 @@ def generate(project_file, builders, apps, build_dir):
         rule="relaze",
         outputs=ninja_build_file,
         implicit=list(files_set),
-        inputs=project_file,
+        inputs=project_file
     )
 
     before = time.time()
@@ -931,7 +934,7 @@ def generate(project_file, builders, apps, build_dir):
             datas = listify(data.get(name, []))
             for _data in datas:
                 _data["_relpath"] = relpath
-                _data["_builddir_rel"] = build_dir_rel
+                _data["_builddir"] = build_dir
                 _class(**_data)
 
     no_post_parse_classes = {Builder}
