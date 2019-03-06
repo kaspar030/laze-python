@@ -49,9 +49,10 @@ def find_import_file(folder):
         if os.path.isfile(import_file):
             return import_file
 
-def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
+def yaml_load(filename, path=None, defaults=None, parent=None, imports=None, import_root=None):
     def do_include(data):
         includes = listify(data.get("include"))
+        _import_root = data.get("_import_root")
         for include in includes:
             _data = (
                 yaml_load(
@@ -59,6 +60,7 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
                     path,
                     parent=filename,
                     imports=imports,
+                    import_root = _import_root
                 )[0]
                 or {}
             )
@@ -98,6 +100,9 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
 
     res = []
     for data in datas:
+        if import_root is not None:
+            data["_import_root"] = import_root
+
         remember_imports()
 
         data_defaults = data.get("defaults", {})
@@ -161,6 +166,7 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
                         defaults=_defaults,
                         parent=filename,
                         imports=imports,
+                        import_root=import_root
                     )
                 )
 
@@ -229,7 +235,8 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
                 name, importer_filename, folder = imported
                 import_file = find_import_file(folder)
                 if import_file == None:
-                    print("laze: error: folder %s (imported by %s) doesn't contain any laze build file.")
+                    print("laze: error: folder %s (imported by %s) doesn't contain any laze build file." %
+                            (folder, importer_filename))
                     sys.exit(1)
 
                 res.extend(
@@ -238,6 +245,7 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
                         path=folder,
                         parent=importer_filename,
                         imports=imports,
+                        import_root=folder,
                     )
                 )
 
@@ -574,9 +582,16 @@ class Module(Declaration):
         if not self.name:
             if self.relpath:
                 self.name = os.path.dirname(self.relpath + "/")
-            else:
-                raise InvalidArgument("module missing name")
-            self.args["name"] = self.name
+                import_root = self.args.get("_import_root")
+                if import_root is not None:
+                    self.name = os.path.relpath(self.name, import_root)
+                    if self.name == ".":
+                        self.name = None
+
+        if not self.name:
+            raise InvalidArgument("module missing name")
+
+        self.args["name"] = self.name
 
         uses = dict_get(self.args, "uses", [])
         list_remove(uses)
@@ -1010,11 +1025,13 @@ def generate(project_file, project_root, builders, apps, build_dir):
     # create objects
     for data in data_list:
         relpath = data.get("_relpath", "")
+        import_root = data.get("_import_root", "")
         for name, _class in class_map.items():
             datas = listify(data.get(name, []))
             for _data in datas:
                 _data["_relpath"] = relpath
                 _data["_builddir"] = build_dir
+                _data["_import_root"] = import_root
                 _class(**_data)
 
     no_post_parse_classes = {Builder}
