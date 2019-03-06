@@ -41,6 +41,10 @@ def git_clone(source, target, commit=None):
             rmtree(target)
 
     print('laze: cloning "%s" to "%s"' % (source, target))
+
+    if source.startswith("~"):
+        source = os.path.expanduser(source)
+
     subprocess.check_call(["git", "clone", source, target])
 
     if commit is not None:

@@ -1,7 +1,9 @@
 import os
 import sys
+
 from laze.debug import dprint
 import laze.constants as const
+from laze.util import dump_dict
 
 
 class InvalidArgument(Exception):
@@ -63,3 +65,7 @@ def determine_dirs(project_file, project_root, build_dir):
     build_dir = os.path.relpath(build_dir, project_root)
 
     return start_dir, build_dir, project_root, project_file
+
+
+def dump_args(builddir, args):
+    dump_dict((builddir, "laze-args"), args)

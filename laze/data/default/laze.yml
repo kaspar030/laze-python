@@ -27,6 +27,10 @@ context:
             - -Wall
             - -Os
             - -g
+      tools:
+        size:
+            cmd:
+              - "${SIZE} ${out}"
 
 # create a builder context with the default context as parent
 builder:
@@ -35,3 +39,8 @@ builder:
       vars:
           CC: gcc
           LINK: gcc
+          SIZE: size
+      tools:
+        run:
+            cmd:
+              - "${out}"

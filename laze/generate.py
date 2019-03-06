@@ -16,7 +16,9 @@ import click
 from .util import (
     merge,
     listify,
+    default_to_regular,
     dict_list_product,
+    dump_dict,
     uniquify,
     deep_replace,
     deep_substitute,
@@ -28,18 +30,24 @@ from .util import (
 from ninja_syntax import Writer
 import laze.dl as dl
 
-from laze.common import ParseError, InvalidArgument, determine_dirs
+from laze.common import ParseError, InvalidArgument, determine_dirs, dump_args
 from laze.debug import dprint
 import laze.constants as const
 
 
 files_set = set()
 short_module_defines = True
+global_build_dir = None
 
 
 def get_data_folder():
     return os.path.join(os.path.dirname(__file__), "data")
 
+def find_import_file(folder):
+    for filename in [ const.BUILDFILE_NAME, const.PROJECTFILE_NAME ]:
+        import_file = os.path.join(folder, filename)
+        if os.path.isfile(import_file):
+            return import_file
 
 def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
     def do_include(data):
@@ -194,7 +202,8 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
                 else:
                     dl_source = {"git": {"url": url}}
 
-                folder = os.path.join(".laze/imports", name)
+                global global_build_dir
+                folder = os.path.join(global_build_dir, "imports", name)
                 if version is not None:
                     dl_source["git"]["commit"] = version
                     folder = os.path.join(folder, version)
@@ -218,9 +227,14 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None):
             for imported in imported_list:
                 # print("YY", imported_list)
                 name, importer_filename, folder = imported
+                import_file = find_import_file(folder)
+                if import_file == None:
+                    print("laze: error: folder %s (imported by %s) doesn't contain any laze build file.")
+                    sys.exit(1)
+
                 res.extend(
                     yaml_load(
-                        os.path.join(folder, const.BUILDFILE_NAME),
+                        import_file,
                         path=folder,
                         parent=importer_filename,
                         imports=imports,
@@ -244,7 +258,9 @@ class Declaration(object):
     def post_parse():
         pass
 
-    def locate_source(self, filename):
+    def locate_source(self, filename = None):
+        if filename==None:
+            filename = ""
         if self.override_source_location:
             res = os.path.join(self.override_source_location, filename)
         else:
@@ -263,6 +279,7 @@ class Context(Declaration):
         self.children = []
         self.modules = {}
         self.vars = None
+        self.tools = None
         self.bindir = self.args.get(
             "bindir",
             "${bindir}/${name}" if self.parent else kwargs.get("_builddir"),
@@ -292,6 +309,13 @@ class Context(Declaration):
                 context.parent.children.append(context)
                 depends(context.parent.name, name)
 
+    def vars_substitute(self, _vars):
+        _dict = {
+                "relpath": self.relpath.rstrip("/") or ".",
+                }
+
+        return deep_substitute(_vars, _dict)
+
     def get_module(self, module_name):
         #        print("get_module()", s, s.modules.keys())
         if module_name in self.disabled_modules:
@@ -309,14 +333,27 @@ class Context(Declaration):
             _vars = {}
             pvars = self.parent.get_vars()
             merge(_vars, copy.deepcopy(pvars), override=True, change_listorder=False)
+            own_vars = self.vars_substitute(self.args.get("vars", {}))
             merge(
-                _vars, self.args.get("vars", {}), override=True, change_listorder=False
+                _vars, own_vars, override=True, change_listorder=False
             )
+
             self.vars = _vars
         else:
-            self.vars = self.args.get("vars", {})
+            self.vars = self.vars_substitute(self.args.get("vars", {}))
 
         return self.vars
+
+    def get_tools(self):
+        if self.tools:
+            pass
+        elif self.parent:
+            self.tools = copy.deepcopy(self.parent.get_tools())
+            self.tools.update(self.args.get("tools", {}))
+        else:
+            self.tools = self.args.get("tools", {})
+
+        return self.tools
 
     def get_bindir(self):
         if "$" in self.bindir:
@@ -345,6 +382,11 @@ class Context(Declaration):
         else:
             return False
 
+    def flatten_vars(self, vars):
+        res = {}
+        for name, _list in vars.items():
+            res[name] = " ".join(listify(_list))
+        return res
 
 class Builder(Context):
     pass
@@ -564,7 +606,8 @@ class Module(Declaration):
 
     def handle_download(self, download):
         if download:
-            dldir = os.path.join(".laze", "dl", self.relpath, self.name)
+            global global_build_dir
+            dldir = os.path.join(global_build_dir, "dl", self.relpath, self.name)
             print("DOWNLOAD", self.name, download, dldir)
 
             # handle possibly passed subdir parameter
@@ -646,9 +689,8 @@ class Module(Declaration):
         vars = self.args.get("vars", {})
         if vars:
             _vars = copy.deepcopy(context.get_vars())
-            _vars = self.vars_substitute(_vars, context)
-
             merge(_vars, vars, override=True)
+            _vars = self.vars_substitute(_vars, context)
             return _vars
         else:
             return copy.deepcopy(context.get_vars())
@@ -673,7 +715,11 @@ class Module(Declaration):
         return vars
 
     def vars_substitute(self, _vars, context):
-        _dict = {"source_folder": self.locate_source("")}
+        _dict = {
+                "relpath":self.relpath,
+                "source_folder": self.locate_source("")
+                }
+
         return deep_substitute(_vars, _dict)
 
     def uses_all(self):
@@ -693,6 +739,7 @@ class Module(Declaration):
             dep_defines.append("-DMODULE_" + dep_name.upper().translate(transtab))
         return dep_defines
 
+rec_dd = lambda: defaultdict(rec_dd)
 
 class App(Module):
     count = 0
@@ -700,6 +747,8 @@ class App(Module):
     global_applist = set()
     global_whitelist = set()
     global_blacklist = set()
+    global_tools = rec_dd() # defaultdict(lambda: dict())
+    global_app_per_folder = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: dict())))
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -711,10 +760,8 @@ class App(Module):
             return set(listify(self.args.get(name, [])))
 
         self.whitelist = _list(self, "whitelist")
-
         self.blacklist = _list(self, "blacklist") | App.global_blacklist
-
-        # print("APP_", s.name, "path:", s.relpath)
+        self.tools = self.args.get("tools", {})
 
     def post_parse():
         for app in App.list:
@@ -742,7 +789,7 @@ class App(Module):
                 continue
 
             #
-            context = Context(add_to_map=False, name=self.name, parent=builder, vars={})
+            context = Context(add_to_map=False, name=self.name, parent=builder, vars={}, tools=self.tools, _relpath=self.relpath)
 
             #
             context.bindir = self.bindir
@@ -862,7 +909,38 @@ class App(Module):
 
             depends(context.parent.name, outfile)
             depends(self.name, outfile)
+            depends("%s:%s" % (self.name, name), outfile)
 
+            module_vars["out"] = outfile
+            module_vars["relpath"] = self.relpath
+
+            # handle tools
+            tools = context.get_tools()
+            if tools:
+                module_vars_flattened = context.flatten_vars(module_vars)
+
+                for tool_name, spec in tools.items():
+                    dprint("verbose", "laze: app %s supports tool %s" % (self.name, tool_name))
+                    if type(spec) == str:
+                        cmd = [str]
+                        spec = {}
+                    elif type(spec) == list:
+                        cmd = spec
+                        spec = {}
+                    elif type(spec) == dict:
+                        cmd = spec["cmd"]
+                    else:
+                        print("laze: error: app %s tool %s has invalid format.")
+                        sys.exit(1)
+
+                    # substitute variables
+                    cmd = [Template(command).substitute(module_vars_flattened) for command in cmd ]
+                    spec["cmd"] = cmd
+                    #spec["target"] = outfile
+
+                    App.global_tools[outfile][tool_name] = spec
+
+            App.global_app_per_folder[self.relpath][self.name][builder.name] = outfile
 
 class_map = {
     "context": Context,
@@ -883,6 +961,7 @@ class_map = {
 )
 def generate(project_file, project_root, builders, apps, build_dir):
     global writer
+    global global_build_dir
 
     App.global_whitelist = set(split(list(builders)))
     App.global_blacklist = set()  # set(split(list(blacklist or [])))
@@ -891,6 +970,7 @@ def generate(project_file, project_root, builders, apps, build_dir):
     start_dir, build_dir, project_root, project_file = determine_dirs(
         project_file, project_root, build_dir
     )
+    global_build_dir = build_dir
 
     os.chdir(project_root)
 
@@ -956,5 +1036,10 @@ def generate(project_file, project_root, builders, apps, build_dir):
     for dep, _set in depends.map.items():
         writer.build(rule="phony", outputs=dep, inputs=list(_set))
 
+    dump_dict((build_dir, "laze-tools"), App.global_tools)
+    dump_dict((build_dir, "laze-app-per-folder"), App.global_app_per_folder)
+    dump_args(build_dir, { "builders": list(builders), "apps": (apps) })
+
     # download external sources
     dl.start()
+

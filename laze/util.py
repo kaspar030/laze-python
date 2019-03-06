@@ -1,9 +1,12 @@
-import traceback
-from itertools import product
 import hashlib
 import json
-from string import Template
+import os
+import traceback
+import yaml
 
+from collections import defaultdict
+from itertools import product
+from string import Template
 
 def listify(something):
     """ if something is a list, return it.  else, return [something]."""
@@ -179,3 +182,28 @@ def dict_digest(_dict):
 
 def dict_hexdigest(_dict):
     return _dict_digest(_dict).hexdigest()
+
+def default_to_regular(d):
+    if isinstance(d, defaultdict):
+        d = {k: default_to_regular(v) for k, v in d.items()}
+    return d
+
+
+def dump_dict(path, data):
+    if type(path) == tuple:
+        path = os.path.join(*path)
+    path = path + ".yml"
+
+    if type(data) == defaultdict:
+        data = default_to_regular(data)
+
+    with open(path, "w") as f:
+        yaml.dump(data, f)
+
+
+def load_dict(path):
+    if type(path) == tuple:
+        path = os.path.join(*path)
+    path = path + ".yml"
+
+    return yaml.load(open(path))
