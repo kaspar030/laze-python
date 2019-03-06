@@ -1,0 +1,6 @@
+module:
+    name: foo
+    sources: foo.c
+    export_vars:
+        CFLAGS:
+          - "-I${relpath}/include"
