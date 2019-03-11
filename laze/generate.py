@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
-import copy
 import os
 import re
 import sys
 import time
 import yaml
 
+from .deepcopy import deepcopy
 from collections import defaultdict
 
 from string import Template
@@ -108,7 +108,7 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None, imp
 
         _defaults = defaults
         if _defaults:
-            _defaults = copy.deepcopy(_defaults)
+            _defaults = deepcopy(_defaults)
             if data_defaults:
                 merge(_defaults, data_defaults)
         else:
@@ -125,7 +125,7 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None, imp
                     defaults_val = _defaults[defaults_key]
                     if type(data_val) == list:
                         for entry in data_val:
-                            merge(entry, copy.deepcopy(defaults_val), join_lists=True)
+                            merge(entry, deepcopy(defaults_val), join_lists=True)
                     else:
                         # print("yaml_load(): merging defaults,", data_val)
                         if data_val == None:
@@ -142,7 +142,7 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None, imp
             result = []
             i = 0
             for repl in dict_list_product(template):
-                _data = copy.deepcopy(data)
+                _data = deepcopy(data)
                 _data["_relpath"] = path
                 _data = deep_replace(_data, repl)
                 _data = do_include(_data)
@@ -341,7 +341,7 @@ class Context(Declaration):
         elif self.parent:
             _vars = {}
             pvars = self.parent.get_vars()
-            merge(_vars, copy.deepcopy(pvars), override=True, change_listorder=False)
+            merge(_vars, deepcopy(pvars), override=True, change_listorder=False)
             own_vars = self.vars_substitute(self.args.get("vars", {}))
             merge(
                 _vars, own_vars, override=True, change_listorder=False
@@ -357,7 +357,7 @@ class Context(Declaration):
         if self.tools:
             pass
         elif self.parent:
-            self.tools = copy.deepcopy(self.parent.get_tools())
+            self.tools = deepcopy(self.parent.get_tools())
             self.tools.update(self.args.get("tools", {}))
         else:
             self.tools = self.args.get("tools", {})
@@ -705,12 +705,12 @@ class Module(Declaration):
     def get_vars(self, context):
         vars = self.args.get("vars", {})
         if vars:
-            _vars = copy.deepcopy(context.get_vars())
+            _vars = deepcopy(context.get_vars())
             merge(_vars, vars, override=True)
             _vars = self.vars_substitute(_vars, context)
             return _vars
         else:
-            return copy.deepcopy(context.get_vars())
+            return deepcopy(context.get_vars())
 
     def get_export_vars(self, context, module_set):
         try:
@@ -894,12 +894,12 @@ class App(Module):
                 # print("EXPORT VARS", module.name, module.get_export_vars(context, module_set))
                 merge(
                     module_vars,
-                    copy.deepcopy(module.get_export_vars(context, module_set)),
+                    deepcopy(module.get_export_vars(context, module_set)),
                 )
 
                 # add "-DMODULE_<module_name> for each used/depended module
                 if module_defines:
-                    module_vars = copy.deepcopy(module_vars)
+                    module_vars = deepcopy(module_vars)
                     cflags = module_vars.setdefault("CFLAGS", [])
                     cflags.extend(module_defines)
 
