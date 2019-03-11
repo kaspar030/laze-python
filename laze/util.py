@@ -144,15 +144,6 @@ def merge(
     return a
 
 
-def dict_get(_dict, key, default):
-    tmp = _dict.get(key)
-    if not tmp:
-        _dict[key] = default
-        return default
-    else:
-        return tmp
-
-
 def static_vars(**kwargs):
     def decorate(func):
         for k in kwargs:

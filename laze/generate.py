@@ -22,7 +22,6 @@ from .util import (
     uniquify,
     deep_replace,
     deep_substitute,
-    dict_get,
     static_vars,
     split,
 )
@@ -538,7 +537,7 @@ class Rule(Declaration):
 
 @static_vars(map={})
 def depends(name, deps=None):
-    dict_get(depends.map, name, set()).update(listify(deps))
+    depends.map.setdefault(name, set()).update(listify(deps))
 
 
 def list_remove(_list):
@@ -595,7 +594,7 @@ class Module(Declaration):
 
         self.args["name"] = self.name
 
-        uses = dict_get(self.args, "uses", [])
+        uses = self.args.setdefault("uses", [])
         list_remove(uses)
         list_remove(self.args.get("depends"))
 
@@ -685,7 +684,7 @@ class Module(Declaration):
         res = sorted(list(modules), key=lambda x: x.name)
 
         # print("get_nested(%s) setting cache" % name, { s.name : [x.name for x in res] })
-        tmp = dict_get(self.get_nested_cache, context, {})
+        tmp = self.get_nested_cache.setdefault(context, {})
         merge(tmp, {name: {self: res}})
 
         return res
@@ -881,13 +880,13 @@ class App(Module):
                                         "options", {}
                                     ).get("use_optional_source_deps", False)
                                 if use_optional_source_deps:
-                                    uses = dict_get(module.args, "uses", [])
+                                    uses = module.args.setdefault("uses", [])
                                     print("OPTIONAL USED:", module.name, key)
                                     uses.extend(list(key))
                     else:
                         sources.append(source)
 
-                print("USES", module.name, dict_get(module.args, "uses", []))
+                print("USES", module.name, module.args.setdefault( "uses", []))
                 # print("MODULE_DEFINES", module.name, module_defines, module_set)
                 module_defines = module.get_defines(context, module_set)
 
@@ -901,7 +900,7 @@ class App(Module):
                 # add "-DMODULE_<module_name> for each used/depended module
                 if module_defines:
                     module_vars = copy.deepcopy(module_vars)
-                    cflags = dict_get(module_vars, "CFLAGS", [])
+                    cflags = module_vars.setdefault("CFLAGS", [])
                     cflags.extend(module_defines)
 
                 for source in sources:
