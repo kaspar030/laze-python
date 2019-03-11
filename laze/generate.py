@@ -731,8 +731,8 @@ class Module(Declaration):
 
     def vars_substitute(self, _vars, context):
         _dict = {
-                "relpath":self.relpath,
-                "source_folder": self.locate_source("")
+                "relpath": self.relpath,
+                "srcdir": self.locate_source("")
                 }
 
         return deep_substitute(_vars, _dict)
