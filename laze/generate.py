@@ -256,6 +256,7 @@ class Declaration(object):
     def __init__(self, **kwargs):
         self.args = kwargs
         self.relpath = self.args.get("_relpath")
+        self.root = self.args.get("_import_root") or "."
         self.override_source_location = None
 
         _vars = self.args.get("vars", {})
@@ -320,6 +321,7 @@ class Context(Declaration):
     def vars_substitute(self, _vars):
         _dict = {
                 "relpath": self.relpath.rstrip("/") or ".",
+                "root" : self.root.rstrip("/") or ".",
                 }
 
         return deep_substitute(_vars, _dict)
@@ -622,6 +624,7 @@ class Module(Declaration):
     def handle_download(self, download):
         if download:
             global global_build_dir
+            # TODO: check if relpath is appropriate
             dldir = os.path.join(global_build_dir, "dl", self.relpath, self.name)
             print("DOWNLOAD", self.name, download, dldir)
 
@@ -732,6 +735,7 @@ class Module(Declaration):
     def vars_substitute(self, _vars, context):
         _dict = {
                 "relpath": self.relpath,
+                "root": self.root,
                 "srcdir": self.locate_source("")
                 }
 
