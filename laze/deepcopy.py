@@ -26,3 +26,8 @@ def deepcopy(sth):
         return sth
     else:
         return cp(sth, _dispatcher)
+
+#import msgpack
+#
+#def deepcopy(sth):
+#    return msgpack.unpackb(msgpack.packb(sth, use_bin_type=False), raw=False)
