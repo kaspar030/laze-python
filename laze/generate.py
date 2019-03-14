@@ -29,7 +29,13 @@ from .util import (
 from ninja_syntax import Writer
 import laze.dl as dl
 
-from laze.common import ParseError, InvalidArgument, determine_dirs, dump_args
+from laze.common import (
+    ParseError,
+    InvalidArgument,
+    determine_dirs,
+    dump_args,
+    rel_start_dir,
+)
 from laze.debug import dprint
 import laze.constants as const
 
@@ -42,13 +48,17 @@ global_build_dir = None
 def get_data_folder():
     return os.path.join(os.path.dirname(__file__), "data")
 
+
 def find_import_file(folder):
-    for filename in [ const.BUILDFILE_NAME, const.PROJECTFILE_NAME ]:
+    for filename in [const.BUILDFILE_NAME, const.PROJECTFILE_NAME]:
         import_file = os.path.join(folder, filename)
         if os.path.isfile(import_file):
             return import_file
 
-def yaml_load(filename, path=None, defaults=None, parent=None, imports=None, import_root=None):
+
+def yaml_load(
+    filename, path=None, defaults=None, parent=None, imports=None, import_root=None
+):
     def do_include(data):
         includes = listify(data.get("include"))
         _import_root = data.get("_import_root")
@@ -59,7 +69,7 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None, imp
                     path,
                     parent=filename,
                     imports=imports,
-                    import_root = _import_root
+                    import_root=_import_root,
                 )[0]
                 or {}
             )
@@ -165,7 +175,7 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None, imp
                         defaults=_defaults,
                         parent=filename,
                         imports=imports,
-                        import_root=import_root
+                        import_root=import_root,
                     )
                 )
 
@@ -234,8 +244,10 @@ def yaml_load(filename, path=None, defaults=None, parent=None, imports=None, imp
                 name, importer_filename, folder = imported
                 import_file = find_import_file(folder)
                 if import_file == None:
-                    print("laze: error: folder %s (imported by %s) doesn't contain any laze build file." %
-                            (folder, importer_filename))
+                    print(
+                        "laze: error: folder %s (imported by %s) doesn't contain any laze build file."
+                        % (folder, importer_filename)
+                    )
                     sys.exit(1)
 
                 res.extend(
@@ -266,8 +278,8 @@ class Declaration(object):
     def post_parse():
         pass
 
-    def locate_source(self, filename = None):
-        if filename==None:
+    def locate_source(self, filename=None):
+        if filename == None:
             filename = ""
         if self.override_source_location:
             res = os.path.join(self.override_source_location, filename)
@@ -288,9 +300,9 @@ class Context(Declaration):
         self.modules = {}
         self.vars = None
         self.tools = None
+        print(self.args)
         self.bindir = self.args.get(
-            "bindir",
-            "${bindir}/${name}" if self.parent else kwargs.get("_builddir"),
+            "bindir", os.path.join(self.args.get("_builddir"), "bin", self.name)
         )
 
         if add_to_map:
@@ -319,9 +331,9 @@ class Context(Declaration):
 
     def vars_substitute(self, _vars):
         _dict = {
-                "relpath": self.relpath.rstrip("/") or ".",
-                "root" : self.root.rstrip("/") or ".",
-                }
+            "relpath": self.relpath.rstrip("/") or ".",
+            "root": self.root.rstrip("/") or ".",
+        }
 
         return deep_substitute(_vars, _dict)
 
@@ -330,9 +342,10 @@ class Context(Declaration):
         if module_name in self.disabled_modules:
             print("DISABLED_MODULE", self.name, module_name)
             return None
+
         module = self.modules.get(module_name)
         if not module and self.parent:
-            return self.parent.get_module(module_name)
+            module = self.parent.get_module(module_name)
         return module
 
     def get_vars(self):
@@ -343,9 +356,7 @@ class Context(Declaration):
             pvars = self.parent.get_vars()
             merge(_vars, deepcopy(pvars), override=True, change_listorder=False)
             own_vars = self.vars_substitute(self.args.get("vars", {}))
-            merge(
-                _vars, own_vars, override=True, change_listorder=False
-            )
+            merge(_vars, own_vars, override=True, change_listorder=False)
 
             self.vars = _vars
         else:
@@ -396,6 +407,7 @@ class Context(Declaration):
         for name, _list in vars.items():
             res[name] = " ".join(listify(_list))
         return res
+
 
 class Builder(Context):
     pass
@@ -733,10 +745,10 @@ class Module(Declaration):
 
     def vars_substitute(self, _vars, context):
         _dict = {
-                "relpath": self.relpath,
-                "root": self.root,
-                "srcdir": self.locate_source("")
-                }
+            "relpath": self.relpath,
+            "root": self.root,
+            "srcdir": self.locate_source(""),
+        }
 
         return deep_substitute(_vars, _dict)
 
@@ -757,7 +769,9 @@ class Module(Declaration):
             dep_defines.append("-DMODULE_" + dep_name.upper().translate(transtab))
         return dep_defines
 
+
 rec_dd = lambda: defaultdict(rec_dd)
+
 
 class App(Module):
     count = 0
@@ -765,14 +779,16 @@ class App(Module):
     global_applist = set()
     global_whitelist = set()
     global_blacklist = set()
-    global_tools = rec_dd() # defaultdict(lambda: dict())
-    global_app_per_folder = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: dict())))
+    global_tools = rec_dd()  # defaultdict(lambda: dict())
+    global_app_per_folder = defaultdict(
+        lambda: defaultdict(lambda: defaultdict(lambda: dict()))
+    )
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.__class__.list.append(self)
 
-        self.bindir = self.args.get("bindir", os.path.join("${bindir}", "${name}"))
+        self.bindir = self.args.get("bindir", os.path.join("${parent}", "${name}"))
 
         def _list(self, name):
             return set(listify(self.args.get(name, [])))
@@ -807,14 +823,22 @@ class App(Module):
                 continue
 
             #
-            context = Context(add_to_map=False, name=self.name, parent=builder, vars={}, tools=self.tools, _relpath=self.relpath)
+            context = Context(
+                add_to_map=False,
+                name=self.name,
+                parent=builder,
+                vars={},
+                tools=self.tools,
+                _relpath=self.relpath,
+                _builddir=self.args.get("_builddir")
+            )
 
             #
             context.bindir = self.bindir
             if "$" in context.bindir:
                 context.bindir = Template(context.bindir).substitute(
                     {
-                        "bindir": builder.get_bindir(),
+                        "parent": builder.get_bindir(),
                         "name": self.name,
                         "app": self.name,
                         "builder": name,
@@ -886,15 +910,14 @@ class App(Module):
                     else:
                         sources.append(source)
 
-                print("USES", module.name, module.args.setdefault( "uses", []))
+                print("USES", module.name, module.args.setdefault("uses", []))
                 # print("MODULE_DEFINES", module.name, module_defines, module_set)
                 module_defines = module.get_defines(context, module_set)
 
                 module_vars = module.get_vars(context)
                 # print("EXPORT VARS", module.name, module.get_export_vars(context, module_set))
                 merge(
-                    module_vars,
-                    deepcopy(module.get_export_vars(context, module_set)),
+                    module_vars, deepcopy(module.get_export_vars(context, module_set))
                 )
 
                 # add "-DMODULE_<module_name> for each used/depended module
@@ -938,7 +961,10 @@ class App(Module):
                 module_vars_flattened = context.flatten_vars(module_vars)
 
                 for tool_name, spec in tools.items():
-                    dprint("verbose", "laze: app %s supports tool %s" % (self.name, tool_name))
+                    dprint(
+                        "verbose",
+                        "laze: app %s supports tool %s" % (self.name, tool_name),
+                    )
                     if type(spec) == str:
                         cmd = [str]
                         spec = {}
@@ -952,13 +978,17 @@ class App(Module):
                         sys.exit(1)
 
                     # substitute variables
-                    cmd = [Template(command).substitute(module_vars_flattened) for command in cmd ]
+                    cmd = [
+                        Template(command).substitute(module_vars_flattened)
+                        for command in cmd
+                    ]
                     spec["cmd"] = cmd
-                    #spec["target"] = outfile
+                    # spec["target"] = outfile
 
                     App.global_tools[outfile][tool_name] = spec
 
             App.global_app_per_folder[self.relpath][self.name][builder.name] = outfile
+
 
 class_map = {
     "context": Context,
@@ -977,7 +1007,9 @@ class_map = {
 @click.option(
     "--build-dir", "-B", type=click.STRING, default="build", envvar="LAZE_BUILDDIR"
 )
-def generate(project_file, project_root, builders, apps, build_dir):
+#@click.option( "--start-dir", "-S", type=click.STRING, envvar="LAZE_STARTDIR")
+@click.option("--global/--local", "-g/-l", "_global", default=False, envvar="LAZE_GLOBAL")
+def generate(project_file, project_root, builders, apps, build_dir, _global):
     global writer
     global global_build_dir
 
@@ -989,6 +1021,10 @@ def generate(project_file, project_root, builders, apps, build_dir):
         project_file, project_root, build_dir
     )
     global_build_dir = build_dir
+
+    if not _global:
+        _rel_start_dir = rel_start_dir(start_dir, project_root)
+        print("laze: generate: local mode in %s" % _rel_start_dir)
 
     os.chdir(project_root)
 
@@ -1007,7 +1043,7 @@ def generate(project_file, project_root, builders, apps, build_dir):
     writer.variable("builddir", build_dir)
 
     # create rule for automatically re-running laze if necessary
-    relaze_rule = "laze generate --project-file ${in}"
+    relaze_rule = "laze generate --project-root %s --project-file ${in}" % project_root
     if builders:
         relaze_rule += " --builders "
         relaze_rule += ",".join(list(builders))
@@ -1020,7 +1056,7 @@ def generate(project_file, project_root, builders, apps, build_dir):
         rule="relaze",
         outputs=ninja_build_file,
         implicit=list(files_set),
-        inputs=project_file
+        inputs=os.path.abspath(project_file),
     )
 
     before = time.time()
@@ -1030,6 +1066,13 @@ def generate(project_file, project_root, builders, apps, build_dir):
         relpath = data.get("_relpath", "")
         import_root = data.get("_import_root", "")
         for name, _class in class_map.items():
+            if (
+                (_global is not True)
+                and (name == "app")
+                and (relpath != _rel_start_dir)
+            ):
+                continue
+
             datas = listify(data.get(name, []))
             for _data in datas:
                 _data["_relpath"] = relpath
@@ -1058,8 +1101,7 @@ def generate(project_file, project_root, builders, apps, build_dir):
 
     dump_dict((build_dir, "laze-tools"), App.global_tools)
     dump_dict((build_dir, "laze-app-per-folder"), App.global_app_per_folder)
-    dump_args(build_dir, { "builders": list(builders), "apps": (apps) })
+    dump_args(build_dir, {"builders": list(builders), "apps": list(apps), "global" : _global})
 
     # download external sources
     dl.start()
-

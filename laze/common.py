@@ -14,14 +14,20 @@ class ParseError(Exception):
     pass
 
 
-def locate_project_root():
+def locate_project_root(start_dir=None):
+    if start_dir is None:
+        start_dir = os.getcwd()
+
     project_filename = const.PROJECTFILE_NAME
     while True:
         cwd = os.getcwd()
         if os.path.isfile(project_filename):
+            if cwd != start_dir:
+                os.chdir(start_dir)
             return cwd
         else:
             if cwd == "/":
+                os.chdir(start_dir)
                 return None
             else:
                 os.chdir("..")
@@ -43,20 +49,20 @@ def determine_builddir(path, start_dir, project_root):
 def determine_dirs(project_file, project_root, build_dir):
     start_dir = os.getcwd()
 
-    if project_root:
-        project_root = os.path.abspath(project_root)
-
     if project_file is None:
         project_file = const.PROJECTFILE_NAME
-        project_root = project_root or locate_project_root()
+        project_root = locate_project_root(start_dir)
         if project_root is None:
             print('laze: error: could not locate folder containing "%s"' % project_file)
-
             sys.exit(1)
+
+        project_file = os.path.normpath(os.path.join(project_root, project_file))
+
     else:
+        project_root = os.path.abspath(project_root)
         project_file = os.path.abspath(project_file)
-        project_root = project_root or os.path.dirname(project_file)
-        dprint("verbose", 'laze: using project root "%s"' % project_root)
+
+    dprint("verbose", 'laze: using project root "%s", project file "%s"' % (project_root, project_file))
 
     project_file = os.path.relpath(project_file, project_root)
 
@@ -68,4 +74,16 @@ def determine_dirs(project_file, project_root, build_dir):
 
 
 def dump_args(builddir, args):
+    print("dump_args", args)
     dump_dict((builddir, "laze-args"), args)
+
+
+def rel_start_dir(start_dir, project_root):
+    rel_start_dir = os.path.relpath(start_dir, project_root)
+
+    # if laze is started from the project root, the relative path will be ".".
+    # but "laze generate" uses "" for the root folder, so adjust here.
+    if rel_start_dir == ".":
+        rel_start_dir = ""
+
+    return rel_start_dir

@@ -11,7 +11,7 @@ import yaml
 import click
 
 from laze.util import uniquify, load_dict
-from laze.common import determine_dirs
+from laze.common import determine_dirs, rel_start_dir
 
 @click.command()
 @click.option("--project-file", "-f", type=click.STRING, envvar="LAZE_PROJECT_FILE")
@@ -22,13 +22,15 @@ from laze.common import determine_dirs
 @click.option("--builders", "-b", type=click.STRING, envvar="LAZE_BUILDERS", multiple=True)
 @click.option("--tool", "-t", type=click.STRING, envvar="LAZE_TOOL")
 @click.option("--no-update", "-n", type=click.BOOL, is_flag=True, envvar="LAZE_NO_UPDATE")
-@click.option("--global/--no-global", "-g", "_global", default=False, envvar="LAZE_GLOBAL")
+@click.option("--global/--local", "-g/-l", "_global", default=False, envvar="LAZE_GLOBAL")
 @click.option("--verbose", "-v", type=click.BOOL, is_flag=True, envvar="LAZE_VERBOSE")
 @click.argument("targets", nargs=-1)
 def build(project_file, project_root, build_dir, tool, targets, builders, no_update, _global, verbose):
     start_dir, build_dir, project_root, project_file = determine_dirs(
         project_file, project_root, build_dir
     )
+
+    os.chdir(project_root)
 
     targets = list(targets)
     builders = list(builders)
@@ -39,18 +41,31 @@ def build(project_file, project_root, build_dir, tool, targets, builders, no_upd
 
     try:
         laze_args = load_dict((build_dir, "laze-args"))
+
+        if laze_args != {"builders": builders, "apps": targets}:
+            laze_args = None
+        # TODO: if all builders and apps are in args, only regenerate if laze files are out of date.
     except FileNotFoundError as e:
+        print("laze-args not found")
+        laze_args = None
+
+    if laze_args == None:
+        print("laze: (re-)generating ninja build files")
         laze_generate_args = ["laze", "generate"]
         if project_file:
-            laze_generate_args += ["-f", project_file]
+            laze_generate_args += ["-f", os.path.normpath(os.path.join(project_root, project_file))]
         if project_root:
             laze_generate_args += ["-r", project_root]
         if build_dir:
             laze_generate_args += ["-B", build_dir]
         for builder in builders:
             laze_generate_args += ["-b", builder ]
-        subprocess.check_call(laze_generate_args)
-        laze_args = load_dict((build_dir, "laze-args"))
+        for target in targets:
+            laze_generate_args += ["-a", target ]
+        if _global is True:
+            laze_generate_args += ["--global"]
+
+        subprocess.check_call(laze_generate_args, cwd=start_dir)
 
     if tool:
         app_target_map = {}
@@ -63,19 +78,18 @@ def build(project_file, project_root, build_dir, tool, targets, builders, no_upd
     # laze was launched.
     #
     if _global:
-        print("global")
-        pass
+        ninja_targets = targets
+        print("laze: global mode")
     else:
-        rel_start_dir = os.path.relpath(start_dir, project_root)
+        _rel_start_dir = rel_start_dir(start_dir, project_root)
 
-        # if laze is started from the project root, the relative path will be ".".
-        # but "laze generate" uses "" for the root folder, so adjust here.
-        if rel_start_dir == ".":
-            rel_start_dir = ""
+        print("laze: local mode in \"%s\"" % _rel_start_dir)
 
-        print("laze: local mode in \"%s\"" % rel_start_dir)
-
-        laze_local = load_dict((build_dir, "laze-app-per-folder"))[rel_start_dir]
+        try:
+            laze_local = load_dict((build_dir, "laze-app-per-folder"))[_rel_start_dir]
+        except KeyError:
+            print("laze: no targets defined in \"%s\" that match %s" % (_rel_start_dir, targets or "all"))
+            sys.exit(1)
 
         ninja_targets = []
         for app, builder_target in laze_local.items():
