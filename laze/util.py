@@ -11,7 +11,7 @@ from string import Template
 def listify(something):
     """ if something is a list, return it.  else, return [something]."""
 
-    if not something:
+    if something is None:
         return []
     if not type(something) == list:
         return [something]
