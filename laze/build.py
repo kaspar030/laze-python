@@ -24,8 +24,12 @@ from laze.common import determine_dirs, rel_start_dir
 @click.option("--no-update", "-n", type=click.BOOL, is_flag=True, envvar="LAZE_NO_UPDATE")
 @click.option("--global/--local", "-g/-l", "_global", default=False, envvar="LAZE_GLOBAL")
 @click.option("--verbose", "-v", type=click.BOOL, is_flag=True, envvar="LAZE_VERBOSE")
+
+@click.option("--clean", "-c", type=click.BOOL, is_flag=True, envvar="LAZE_CLEAN")
+@click.option("--jobs", "-j", type=click.INT, envvar="LAZE_JOBS")
+@click.option("--keep-going", "-k", type=click.INT, default=1, envvar="LAZE_JOBS")
 @click.argument("targets", nargs=-1)
-def build(project_file, project_root, build_dir, tool, targets, builders, no_update, _global, verbose):
+def build(project_file, project_root, build_dir, tool, targets, builders, no_update, _global, verbose, clean, jobs, keep_going):
     start_dir, build_dir, project_root, project_file = determine_dirs(
         project_file, project_root, build_dir
     )
@@ -42,7 +46,7 @@ def build(project_file, project_root, build_dir, tool, targets, builders, no_upd
     try:
         laze_args = load_dict((build_dir, "laze-args"))
 
-        if laze_args != {"builders": builders, "apps": targets}:
+        if laze_args != {"builders": builders, "apps": targets, "global":_global}:
             laze_args = None
         # TODO: if all builders and apps are in args, only regenerate if laze files are out of date.
     except FileNotFoundError as e:
@@ -139,6 +143,10 @@ def build(project_file, project_root, build_dir, tool, targets, builders, no_upd
     ninja_extra_args = []
     if verbose:
         ninja_extra_args += ["-v"]
+    if jobs is not None:
+        ninja_extra_args += ["-j", str(jobs)]
+    if keep_going is not None:
+        ninja_extra_args += ["-k", str(keep_going)]
 
     ninja_build_file = os.path.join(build_dir, "build.ninja")
 
