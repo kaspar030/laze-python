@@ -8,6 +8,7 @@ import yaml
 
 from .deepcopy import deepcopy
 from collections import defaultdict
+from itertools import chain
 
 from string import Template
 
@@ -618,6 +619,11 @@ class Module(Declaration):
         self.get_nested_cache = {}
         self.export_vars = {}
 
+        self.depends = listify(self.args.get("depends"))
+        self.used = listify(self.args.get("uses"))
+        self.depends_cache = {}
+        self.uses_cache = {}
+
     def post_parse():
         for module in Module.list:
             context_name = module.args.get("context", "default")
@@ -650,69 +656,95 @@ class Module(Declaration):
 
             dl.add_to_queue(download, dldir)
 
-    def get_nested(self, context, name, notfound_error=True):
+    def get_deps(self, context, resolved=None, unresolved=None):
+        if resolved is None:
+            try:
+                return self.depends_cache[context]
+            except KeyError:
+                pass
+
+            #print("get_deps()", self.name)
+
+            resolved = []
+            unresolved = set()
+            recursed = False
+        else:
+            recursed = True
+
+        unresolved.add(self)
+
+        for dep_name in self.depends:
+            if dep_name.startswith("?"):
+                dep_name = dep_name[1:]
+
+                dep = context.get_module(dep_name)
+                if dep is not None:
+                    try:
+                        dep.get_deps(context)
+                    except Module.NotAvailable:
+                        continue
+                else:
+                    continue
+            else:
+                dep = context.get_module(dep_name)
+
+                if dep is None:
+                    raise Module.NotAvailable(context, self.name, dep_name)
+
+            if dep not in resolved:
+                if dep in unresolved:
+                    #print("skip dep %s -> %s" %(self.name, dep.name))
+                    continue
+
+                dep.get_deps(context, resolved, unresolved)
+
+        resolved.append(self)
+        unresolved.discard(self)
+
+        if recursed is False:
+            _reversed = uniquify(reversed(resolved))
+            self.depends_cache[context] = _reversed
+            print("get_deps() resolved to", self.name, [ x.name for x in _reversed ])
+            return _reversed
+
+    def get_used(self, context, module_set):
         try:
-            # print("get_nested(%s) returning cache " % name, s.name, [ x.name for x in s.get_nested_cache[context][name][s]])
-            return self.get_nested_cache[context][name][self]
+            return self.uses_cache[context]
         except KeyError:
             pass
 
-        module_names = set(listify(self.args.get(name, [])))
-        modules = set()
-        all_module_names = set()
-        while module_names:
-            all_module_names |= module_names
-            for module_name in module_names:
-                if module_name == "all":
-                    continue
+        res = []
+        for dep_name in self.used:
+            if dep_name in module_set:
+                res.append(context.get_module(dep_name))
 
-                optional = module_name.startswith("?")
-
-                if optional:
-                    module_name = module_name[1:]
-
-                module = context.get_module(module_name)
-                if not module:
-                    if notfound_error and not optional:
-                        raise Module.NotAvailable(context, self.name, module_name)
-                    print("NOTFOUND", context, module_name)
-                    continue
-
-                if optional:
-                    try:
-                        list(module.get_deps(context))
-                    except Module.NotAvailable:
-                        continue
-
-                all_module_names.add(module_name)
-                modules.add(module)
-
-            new_module_names = set()
-            for module in modules:
-                new_module_names |= set(listify(module.args.get(name, [])))
-
-            module_names = new_module_names - all_module_names
-
-        res = sorted(list(modules), key=lambda x: x.name)
-
-        # print("get_nested(%s) setting cache" % name, { s.name : [x.name for x in res] })
-        tmp = self.get_nested_cache.setdefault(context, {})
-        merge(tmp, {name: {self: res}})
-
+        self.uses_cache[context] = res
         return res
 
-    def get_deps(self, context):
-        return uniquify(self.get_nested(context, "depends"))
+    def get_used_deps(self, context, module_set, resolved=None, unresolved=None):
+        if resolved is None:
+            resolved = []
+            unresolved = set()
+            recursed = False
+        else:
+            recursed = True
 
-    def get_used(self, context, all=False):
-        res = []
-        res.extend(self.get_nested(context, "uses", notfound_error=False))
+        unresolved.add(self)
 
-        for dep in self.get_nested(context, "depends", notfound_error=False):
-            res.extend(dep.get_nested(context, "uses", notfound_error=False))
-            if all:
-                res.append(dep)
-        return uniquify(res)
+        for dep in chain(self.get_deps(context), self.get_used(context, module_set)):
+            if dep not in resolved:
+                if dep in unresolved:
+                    #print("skip dep %s -> %s" %(self.name, dep.name))
+                    continue
+
+                dep.get_used_deps(context, module_set, resolved, unresolved)
+
+        resolved.append(self)
+        unresolved.discard(self)
+
+        if recursed is False:
+            _reversed = uniquify(reversed(resolved))
+            return _reversed
 
     def get_vars(self, context):
         vars = self.args.get("vars", {})
@@ -730,17 +762,17 @@ class Module(Declaration):
         except KeyError:
             pass
 
-        vars = self.args.get("export_vars", {})
-        vars = self.vars_substitute(vars, context)
+        vars = {}
 
-        for dep in self.get_used(context, all=True):
-            if dep.name in module_set:
-                dep_export_vars = dep.args.get("export_vars", {})
-                if dep_export_vars:
-                    dep_export_vars = dep.vars_substitute(dep_export_vars, context)
-                    merge(vars, dep_export_vars, join_lists=True)
+        for dep in self.get_used_deps(context, module_set):
+            #print("get_export_vars", self.name, dep.name)
+            dep_export_vars = dep.args.get("export_vars", {})
+            if dep_export_vars:
+                dep_export_vars = dep.vars_substitute(dep_export_vars, context)
+                merge(vars, dep_export_vars, join_lists=True)
 
         self.export_vars[context] = vars
+        print("EXPORT VARS", self.name, vars)
         return vars
 
     def vars_substitute(self, _vars, context):
@@ -759,8 +791,11 @@ class Module(Declaration):
         if self.uses_all():
             deps_available = module_set
         else:
-            dep_names = set([x.name for x in self.get_used(context)])
-            deps_available = dep_names & module_set
+            deps_available = set()
+            for dep in self.get_used_deps(context, module_set):
+                for used in dep.get_used(context, module_set):
+                    print("adduse", self.name, used.name)
+                    deps_available.add(used.name)
 
         dep_defines = []
         for dep_name in sorted(deps_available):
@@ -851,7 +886,7 @@ class App(Module):
 
             print("  build", self.name, "for", name)
             try:
-                modules = [self] + uniquify(self.get_deps(context))
+                modules = self.get_deps(context)
             except Module.NotAvailable as e:
                 print(
                     "laze: WARNING: skipping app",
