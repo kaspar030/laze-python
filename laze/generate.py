@@ -23,6 +23,7 @@ from .util import (
     uniquify,
     deep_replace,
     deep_substitute,
+    deep_safe_substitute,
     static_vars,
     split,
 )
@@ -782,7 +783,8 @@ class Module(Declaration):
             "srcdir": self.locate_source(""),
         }
 
-        return deep_substitute(_vars, _dict)
+        deep_safe_substitute(_vars, _dict)
+        return deep_substitute(_vars, context.flatten_vars(context.get_vars()))
 
     def uses_all(self):
         return "all" in listify(self.args.get("uses", []))
@@ -862,7 +864,7 @@ class App(Module):
                 add_to_map=False,
                 name=self.name,
                 parent=builder,
-                vars={},
+                vars={"builder": name},
                 tools=self.tools,
                 _relpath=self.relpath,
                 _builddir=self.args.get("_builddir")
