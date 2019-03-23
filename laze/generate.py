@@ -460,7 +460,7 @@ class Rule(Declaration):
             name = name[2:-1]
             if not name in {"in", "out"}:
                 var_names.append(name)
-        # print("RULE", s.name, "vars:", var_names)
+        #print("RULE", self.name, "vars:", var_names)
         self.var_list = var_names
 
     def to_ninja(self, writer):
@@ -514,7 +514,7 @@ class Rule(Declaration):
             return 1
 
         _vars = _vars or {}
-        # print("RULE", s.name, _in, _out, _vars)
+        #print("RULE", self.name, _in, _out, _vars)
         vars = {}
         for name in self.var_list:
             try:
