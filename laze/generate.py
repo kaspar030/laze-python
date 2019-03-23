@@ -1097,7 +1097,7 @@ def generate(project_file, project_root, builders, apps, build_dir, _global):
         relaze_rule += " --apps "
         relaze_rule += ",".join(list(apps))
 
-    writer.rule("relaze", relaze_rule, restat=True, generator=True)
+    writer.rule("relaze", relaze_rule, restat=True, generator=True, pool="console")
     writer.build(
         rule="relaze",
         outputs=ninja_build_file,
