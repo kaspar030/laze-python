@@ -624,6 +624,7 @@ class Module(Declaration):
         self.used = listify(self.args.get("uses"))
         self.depends_cache = {}
         self.uses_cache = {}
+        self.used_deps_cache = {}
 
     def post_parse():
         for module in Module.list:
@@ -724,6 +725,10 @@ class Module(Declaration):
 
     def get_used_deps(self, context, module_set, resolved=None, unresolved=None):
         if resolved is None:
+            try:
+                return self.used_deps_cache[context]
+            except KeyError:
+                pass
             resolved = []
             unresolved = set()
             recursed = False
@@ -745,6 +750,7 @@ class Module(Declaration):
 
         if recursed is False:
             _reversed = uniquify(reversed(resolved))
+            self.used_deps_cache[context] = _reversed
             return _reversed
 
     def get_vars(self, context):
