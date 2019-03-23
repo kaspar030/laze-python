@@ -5,6 +5,7 @@ import sys
 import click
 from .util import uniquify, split
 
+import laze.constants as const
 
 @click.command()
 @click.option(
@@ -17,16 +18,16 @@ from .util import uniquify, split
 @click.option("--sources", multiple=True)
 @click.option("--auto-sources", is_flag=True)
 def create(_type, name, context, depends, uses, sources, auto_sources):
-    if os.path.isfile("build.yml"):
-        print("laze: error: 'build.yml' already exists.")
+    if os.path.isfile(const.BUILDFILE_NAME):
+        print("laze: error: '%s' already exists." % const.BUILDFILE_NAME)
         sys.exit(1)
 
-    with open("build.yml", "w") as f:
+    with open(const.BUILDFILE_NAME, "w") as f:
         print("%s:" % _type, file=f)
 
         if _type == "subdir":
-            for dirname in glob.glob("*/"):
-                print("        - %s" % dirname.rstrip("/"), file=f)
+            for buildfile in glob.glob("*/%s" % const.BUILDFILE_NAME):
+                print("        - %s" % os.path.dirname(buildfile))
             return
 
         if name:
