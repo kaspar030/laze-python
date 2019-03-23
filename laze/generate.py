@@ -980,9 +980,12 @@ class App(Module):
                     # print ( source) # , module.get_vars(context), rule.name)
 
             link = Rule.get_by_name("LINK")
-            outfile = context.get_filepath(os.path.basename(self.name)) + ".elf"
+            outfile = self.args.get("outfile",
+                    context.get_filepath(os.path.basename(self.name)) + ".elf")
 
-            res = link.to_ninja_build(writer, objects, outfile, context.get_vars())
+            link_vars = context.get_vars()
+            merge(link_vars, self.get_export_vars(context, module_set))
+            res = link.to_ninja_build(writer, objects, outfile, link_vars)
             if res != outfile:
                 # An identical binary has been built for another Application.
                 # As the binary can be considered a final target, create a file
