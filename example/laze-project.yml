@@ -2,16 +2,8 @@
 import:
     - $laze/default
 
-builder:
-    name: host2
-    parent: host
-
 # define an application named "hello"
 app:
     name: hello
-    depends: foo
     sources:
         - hello.c
-
-subdirs:
-    - foo
