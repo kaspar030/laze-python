@@ -13,19 +13,42 @@ Aspires to be the next goto-alternative to make.
     $ apt-get install ninja
     $ pip3 install --user laze
 
+
 # Getting started
 
-Laze is very early in its development, thus getting started is currently way
-more complicated (and verbose) than necessary.
+Create two files:
 
-Anyhow, there's an example project in the examples folder.
-After installing laze (e.g., using pip) and checking out this repository, you
-can build the example project with these commands:
+hello.c:
 
-    $ cd example
-    $ laze generate build.yml
-    $ ninja
-    $ ./hello/bin/host/hello.elf
+```
+
+#include <stdio.h>
+
+int main(int argc, const char *argv[])
+{
+    printf("Laze says hello!\n");
+    return 0;
+}
+```
+
+laze-project.yml:
+
+```
+# import default build rules and host context
+import:
+    - $laze/default
+
+# define an application named "hello"
+app:
+    name: hello
+    sources:
+        - hello.c
+```
+
+Then compile & run:
+
+    $ laze -t run
+
 
 # Documentation
 
