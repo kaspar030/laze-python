@@ -81,9 +81,4 @@ def dump_args(builddir, args):
 def rel_start_dir(start_dir, project_root):
     rel_start_dir = os.path.relpath(start_dir, project_root)
 
-    # if laze is started from the project root, the relative path will be ".".
-    # but "laze generate" uses "" for the root folder, so adjust here.
-    if rel_start_dir == ".":
-        rel_start_dir = ""
-
     return rel_start_dir

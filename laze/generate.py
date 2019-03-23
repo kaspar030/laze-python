@@ -1112,7 +1112,7 @@ def generate(project_file, project_root, builders, apps, build_dir, _global):
     # PARSING PHASE
     # create objects
     for data in data_list:
-        relpath = data.get("_relpath", "")
+        relpath = data.get("_relpath", "") or "."
         import_root = data.get("_import_root", "")
         for name, _class in class_map.items():
             if (
