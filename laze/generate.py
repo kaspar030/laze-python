@@ -302,7 +302,7 @@ class Context(Declaration):
         self.modules = {}
         self.vars = None
         self.tools = None
-        print(self.args)
+
         self.bindir = self.args.get(
             "bindir", os.path.join(self.args.get("_builddir"), "bin", self.name)
         )
@@ -796,7 +796,6 @@ class Module(Declaration):
             deps_available = set()
             for dep in self.get_used_deps(context, module_set):
                 for used in dep.get_used(context, module_set):
-                    print("adduse", self.name, used.name)
                     deps_available.add(used.name)
 
         dep_defines = []
