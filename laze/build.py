@@ -46,8 +46,13 @@ def build(project_file, project_root, build_dir, tool, targets, builders, no_upd
     try:
         laze_args = load_dict((build_dir, "laze-args"))
 
-        if laze_args != {"builders": builders, "apps": targets, "global":_global}:
+        args = {"builders": builders, "apps": targets, "global" : _global}
+        if not _global:
+            args["start_dir"] = start_dir
+
+        if laze_args != args:
             laze_args = None
+
         # TODO: if all builders and apps are in args, only regenerate if laze files are out of date.
     except FileNotFoundError as e:
         print("laze-args not found")

@@ -1085,7 +1085,11 @@ def generate(project_file, project_root, builders, apps, build_dir, _global):
     writer.variable("builddir", build_dir)
 
     # create rule for automatically re-running laze if necessary
-    relaze_rule = "laze generate --project-root %s --project-file ${in}" % project_root
+    relaze_rule = "laze"
+    if not _global:
+        relaze_rule += " -C%s" % start_dir
+    relaze_rule += " generate --project-root %s --project-file ${in}" % project_root
+    relaze_rule += " --global" if _global else " --local"
     if builders:
         relaze_rule += " --builders "
         relaze_rule += ",".join(list(builders))
@@ -1143,7 +1147,12 @@ def generate(project_file, project_root, builders, apps, build_dir, _global):
 
     dump_dict((build_dir, "laze-tools"), App.global_tools)
     dump_dict((build_dir, "laze-app-per-folder"), App.global_app_per_folder)
-    dump_args(build_dir, {"builders": list(builders), "apps": list(apps), "global" : _global})
+
+    args = {"builders": list(builders), "apps": list(apps), "global" : _global}
+    if not _global:
+        args["start_dir"] = start_dir
+
+    dump_args(build_dir, args)
 
     # download external sources
     dl.start()
