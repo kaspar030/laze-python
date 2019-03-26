@@ -38,6 +38,9 @@ from laze.common import (
     dump_args,
     rel_start_dir,
 )
+
+import laze.mtimelog
+
 from laze.debug import dprint
 import laze.constants as const
 
@@ -1156,6 +1159,8 @@ def generate(project_file, project_root, builders, apps, build_dir, _global):
         args["start_dir"] = start_dir
 
     dump_args(build_dir, args)
+
+    laze.mtimelog.write_log(os.path.join(build_dir, "laze-files.mp"), files_set)
 
     # download external sources
     dl.start()

@@ -12,6 +12,7 @@ import click
 
 from laze.util import uniquify, load_dict
 from laze.common import determine_dirs, rel_start_dir
+import laze.mtimelog
 
 @click.command()
 @click.option("--project-file", "-f", type=click.STRING, envvar="LAZE_PROJECT_FILE")
@@ -44,18 +45,21 @@ def build(project_file, project_root, build_dir, tool, targets, builders, no_upd
         target_set = set(targets)
 
     try:
-        laze_args = load_dict((build_dir, "laze-args"))
-
-        args = {"builders": builders, "apps": targets, "global" : _global}
-        if not _global:
-            args["start_dir"] = start_dir
-
-        if laze_args != args:
+        if laze.mtimelog.read_log(os.path.join(build_dir, "laze-files.mp"), True) == False:
+            print("laze: buildfiles changed")
             laze_args = None
+        else:
+            laze_args = load_dict((build_dir, "laze-args"))
 
-        # TODO: if all builders and apps are in args, only regenerate if laze files are out of date.
+            args = {"builders": builders, "apps": targets, "global" : _global}
+            if not _global:
+                args["start_dir"] = start_dir
+
+            if laze_args != args:
+                laze_args = None
+
     except FileNotFoundError as e:
-        print("laze-args not found")
+        print("laze-args not found or laze build file removed")
         laze_args = None
 
     if laze_args == None:
@@ -74,7 +78,11 @@ def build(project_file, project_root, build_dir, tool, targets, builders, no_upd
         if _global is True:
             laze_generate_args += ["--global"]
 
-        subprocess.check_call(laze_generate_args, cwd=start_dir)
+        try:
+            subprocess.check_call(laze_generate_args, cwd=start_dir)
+        except subprocess.CalledProcessError:
+            print("laze: re-generation of build files failed.")
+            sys.exit(1)
 
     if tool:
         app_target_map = {}
