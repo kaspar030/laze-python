@@ -35,6 +35,7 @@ def build(project_file, project_root, build_dir, tool, targets, builders, no_upd
         project_file, project_root, build_dir
     )
 
+    laze_binary = sys.argv[0]
     os.chdir(project_root)
 
     targets = list(targets)
@@ -64,7 +65,7 @@ def build(project_file, project_root, build_dir, tool, targets, builders, no_upd
 
     if laze_args == None:
         print("laze: (re-)generating ninja build files")
-        laze_generate_args = ["laze", "generate"]
+        laze_generate_args = [laze_binary, "generate"]
         if project_file:
             laze_generate_args += ["-f", os.path.normpath(os.path.join(project_root, project_file))]
         if project_root:
