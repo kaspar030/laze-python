@@ -6,6 +6,15 @@ import sys
 import time
 import yaml
 
+# try to use libyaml (faster C-based yaml lib),
+# fallback to pure python version
+from yaml import load, dump
+try:
+    from yaml import CLoader as Loader, CDumper as Dumper
+except ImportError:
+    print("laze: warning: using slow python-based yaml loader")
+    from yaml import Loader, Dumper
+
 from .deepcopy import deepcopy
 from collections import defaultdict
 from itertools import chain
@@ -104,7 +113,7 @@ def yaml_load(
 
     try:
         with open(filename, "r") as f:
-            datas = yaml.load_all(f.read())
+            datas = yaml.load_all(f.read(), Loader=Loader)
     except FileNotFoundError as e:
         msg = "laze: error: cannot find %s%s" % (
             filename,
