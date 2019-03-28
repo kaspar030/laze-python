@@ -698,6 +698,11 @@ class Module(Declaration):
         unresolved.add(self)
 
         for dep_name in self.depends:
+            # (handle if X is in module_set, depend on Y)
+            #if type(dep_name) == dict:
+            #    # HANDLE
+            #    continue
+
             if dep_name.startswith("?"):
                 dep_name = dep_name[1:]
 
@@ -928,6 +933,18 @@ class App(Module):
             App.count += 1
 
             module_set = set()
+            ## beginning of optional dependencies
+            # (if X is in module set, depend on Y)
+            # modules_depend_optional = {}
+            # for module in modules:
+            #     module_set.add(module.name)
+            #     _tmp = module.args.get("depends")
+            #     if _tmp:
+            #         for dep in _tmp:
+            #             if type(dep) == dict:
+            #                 print("OPTIONAL DEP:", module.name, dep)
+
+
             for module in modules:
                 module_set.add(module.name)
                 print("    %s:" % module.name, module.args.get("sources"))
