@@ -621,6 +621,16 @@ class Module(Declaration):
         self.args["name"] = self.name
 
         uses = self.args.setdefault("uses", [])
+
+        # add optional sources' trigger modules to "uses"
+        sources = self.args.get("sources")
+        if sources:
+            for source in sources:
+                if type(source) == dict:
+                    for key, value in source.items():
+                        # splitting by comma enables multiple deps like "- a,b: file.c"
+                        uses.extend(key.split(","))
+
         list_remove(uses)
         list_remove(self.args.get("depends"))
 
@@ -944,7 +954,6 @@ class App(Module):
                 sources = []
 
                 # handle optional sources ("- optional_module: file.c")
-                use_optional_source_deps = None
                 for source in _sources:
                     if type(source) == dict:
                         for key, value in source.items():
@@ -953,14 +962,6 @@ class App(Module):
                             if not key - module_set:
                                 print("OPTIONAL sources:", module.name, value)
                                 sources.extend(listify(value))
-                                if use_optional_source_deps == None:
-                                    use_optional_source_deps = module.args.get(
-                                        "options", {}
-                                    ).get("use_optional_source_deps", False)
-                                if use_optional_source_deps:
-                                    uses = module.args.setdefault("uses", [])
-                                    print("OPTIONAL USED:", module.name, key)
-                                    uses.extend(list(key))
                     else:
                         sources.append(source)
 
