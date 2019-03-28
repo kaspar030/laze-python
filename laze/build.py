@@ -143,12 +143,12 @@ def build(project_file, project_root, build_dir, tool, targets, builders, no_upd
             app, builder = app_target_map[ninja_target]
 
 
-            tool = target_tools.get(tool)
-            if not tool:
+            tool_obj = target_tools.get(tool)
+            if not tool_obj:
                 print("laze: target %s builder %s doesn't support tool %s" % (ninja_target, builder, tool))
                 sys.exit(1)
 
-            app_builder_tool_target_list.append((app, builder, ninja_target, tool))
+            app_builder_tool_target_list.append((app, builder, ninja_target, tool_obj))
 
     if targets and not ninja_targets:
         print("no ninja targets, passing through")
