@@ -620,7 +620,8 @@ class Module(Declaration):
 
         self.args["name"] = self.name
 
-        uses = self.args.setdefault("uses", [])
+        uses = self.args["uses"] = listify(self.args.get("uses"))
+        depends = self.args["depends"] = listify(self.args.get("depends"))
 
         # add optional sources' trigger modules to "uses"
         sources = self.args.get("sources")
@@ -632,9 +633,9 @@ class Module(Declaration):
                         uses.extend(key.split(","))
 
         list_remove(uses)
-        list_remove(self.args.get("depends"))
+        list_remove(depends)
 
-        for name in listify(self.args.get("depends")):
+        for name in depends:
             if name.startswith("?"):
                 uses.append(name[1:])
 
@@ -642,8 +643,8 @@ class Module(Declaration):
         self.get_nested_cache = {}
         self.export_vars = {}
 
-        self.depends = listify(self.args.get("depends"))
-        self.used = listify(self.args.get("uses"))
+        self.depends = depends
+        self.used = uses
         self.depends_cache = {}
         self.uses_cache = {}
         self.used_deps_cache = {}
