@@ -171,14 +171,14 @@ def static_vars(**kwargs):
 
 
 def split(_list, splitter=","):
+    if len(_list) == 0:
+        return []
+
     tmp = []
     for entry in _list:
         tmp.extend(entry.split(splitter))
-    _list.clear()
-    _list.extend(tmp)
 
-    return _list
-
+    return tmp
 
 def _dict_digest(_dict):
     return hashlib.sha1(json.dumps(_dict, sort_keys=True).encode("utf-8"))
@@ -207,6 +207,8 @@ def dump_dict(path, data):
 
     with open(path, "w") as f:
         yaml.dump(data, f)
+
+    return path
 
 
 def load_dict(path):

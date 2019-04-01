@@ -10,8 +10,9 @@ import yaml
 
 import click
 
-from laze.util import uniquify, load_dict
-from laze.common import determine_dirs, rel_start_dir
+from laze.util import uniquify, load_dict, listify, split
+from laze.common import determine_dirs, rel_start_dir, dump_args, write_ninja_build_args_file
+from laze.deepcopy import deepcopy
 import laze.mtimelog
 
 @click.command()
@@ -31,9 +32,23 @@ import laze.mtimelog
 @click.option("--keep-going", "-k", type=click.INT, default=1, envvar="LAZE_JOBS")
 @click.argument("targets", nargs=-1)
 def build(project_file, project_root, build_dir, tool, targets, builders, no_update, _global, verbose, clean, jobs, keep_going):
-    start_dir, build_dir, project_root, project_file = determine_dirs(
-        project_file, project_root, build_dir
-    )
+
+    targets = split(targets)
+    builders = split(builders)
+
+    generate_args = {
+            "project_file": project_file,
+            "project_root": project_root,
+            "build_dir": build_dir,
+            "builders": builders,
+            "_global": _global,
+            "apps": targets,
+            }
+
+    start_dir, build_dir, project_root, project_file = determine_dirs(generate_args)
+
+    ninja_build_file = os.path.join(build_dir, "build.ninja")
+    ninja_build_args_file = os.path.join(build_dir, "build-args.ninja")
 
     laze_binary = sys.argv[0]
     os.chdir(project_root)
@@ -52,11 +67,7 @@ def build(project_file, project_root, build_dir, tool, targets, builders, no_upd
         else:
             laze_args = load_dict((build_dir, "laze-args"))
 
-            args = {"builders": builders, "apps": targets, "global" : _global}
-            if not _global:
-                args["start_dir"] = start_dir
-
-            if laze_args != args:
+            if laze_args != generate_args:
                 laze_args = None
 
     except FileNotFoundError as e:
@@ -65,22 +76,16 @@ def build(project_file, project_root, build_dir, tool, targets, builders, no_upd
 
     if laze_args == None:
         print("laze: (re-)generating ninja build files")
-        laze_generate_args = [laze_binary, "generate"]
-        if project_file:
-            laze_generate_args += ["-f", os.path.normpath(os.path.join(project_root, project_file))]
-        if project_root:
-            laze_generate_args += ["-r", project_root]
-        if build_dir:
-            laze_generate_args += ["-B", build_dir]
-        for builder in builders:
-            laze_generate_args += ["-b", builder ]
-        for target in targets:
-            laze_generate_args += ["-a", target ]
-        if _global is True:
-            laze_generate_args += ["--global"]
+        laze_args_file = dump_args(build_dir, generate_args)
+
+        ninja_build_file = os.path.join(build_dir, "build.ninja")
+        ninja_build_args_file = os.path.join(build_dir, "build-args.ninja")
+        ninja_build_file_deps = ninja_build_file + ".d"
+        if not os.path.isfile(ninja_build_args_file):
+            write_ninja_build_args_file(ninja_build_args_file, ninja_build_file, ninja_build_file_deps, laze_args_file, build_dir)
 
         try:
-            subprocess.check_call(laze_generate_args, cwd=start_dir)
+            subprocess.check_call(["ninja", "-f", ninja_build_args_file, "relaze"], cwd=project_root)
         except subprocess.CalledProcessError:
             print("laze: re-generation of build files failed.")
             sys.exit(1)
@@ -161,8 +166,6 @@ def build(project_file, project_root, build_dir, tool, targets, builders, no_upd
         ninja_extra_args += ["-j", str(jobs)]
     if keep_going is not None:
         ninja_extra_args += ["-k", str(keep_going)]
-
-    ninja_build_file = os.path.join(build_dir, "build.ninja")
 
     try:
         subprocess.check_call(["ninja", "-f", ninja_build_file] + ninja_extra_args + ninja_targets, cwd=project_root)

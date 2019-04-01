@@ -46,6 +46,7 @@ from laze.common import (
     determine_dirs,
     dump_args,
     rel_start_dir,
+    write_ninja_build_args_file
 )
 
 import laze.mtimelog
@@ -734,7 +735,7 @@ class Module(Declaration):
         if recursed is False:
             _reversed = uniquify(reversed(resolved))
             self.depends_cache[context] = _reversed
-            print("get_deps() resolved to", self.name, [ x.name for x in _reversed ])
+            #print("get_deps() resolved to", self.name, [ x.name for x in _reversed ])
             return _reversed
 
     def get_used(self, context, module_set):
@@ -960,7 +961,8 @@ class App(Module):
                 module_global_vars = module.vars_substitute(module_global_vars, context)
                 if module_global_vars:
                     merge(context_vars, module_global_vars, join_lists=True)
-                    print("    global_vars:", module_global_vars, context_vars)
+                    print("    global_vars:", module_global_vars)
+
 
             print("    %s:" % context, context_vars)
 
@@ -1085,24 +1087,42 @@ class_map = {
 )
 #@click.option( "--start-dir", "-S", type=click.STRING, envvar="LAZE_STARTDIR")
 @click.option("--global/--local", "-g/-l", "_global", default=False, envvar="LAZE_GLOBAL")
-def generate(project_file, project_root, builders, apps, build_dir, _global):
+@click.option("--args-file", "-A", type=click.Path(), envvar="LAZE_ARGS_FILE")
+def generate(**kwargs):
     global writer
     global global_build_dir
 
-    App.global_whitelist = set(split(list(builders)))
-    App.global_blacklist = set()  # set(split(list(blacklist or [])))
-    App.global_applist = set(split(list(apps)))
+    kwargs["apps"] = split(kwargs.get("apps"))
+    kwargs["builders"] = split(kwargs.get("builders"))
 
-    start_dir, build_dir, project_root, project_file = determine_dirs(
-        project_file, project_root, build_dir
-    )
+    args_file = kwargs.get("args_file")
+    if args_file:
+        args = yaml.load(open(args_file, "r"))
+        for key, value in kwargs.items():
+            if value is not None:
+                args[key] = value
+    else:
+        args = kwargs
+
+    _global   = args.get("_global")
+    apps      = args.get("apps")
+    blacklist = args.get("blacklist")
+    builders  = args.get("builders")
+
+    start_dir, build_dir, project_root, project_file = determine_dirs(args)
     global_build_dir = build_dir
+
+    os.chdir(project_root)
+
+    args_file = dump_args(build_dir, args)
+
+    App.global_whitelist = set(builders)
+    App.global_blacklist = set()  # set(split(list(blacklist or [])))
+    App.global_applist = set(apps)
 
     if not _global:
         _rel_start_dir = rel_start_dir(start_dir, project_root)
         print("laze: generate: local mode in %s" % _rel_start_dir)
-
-    os.chdir(project_root)
 
     before = time.time()
     try:
@@ -1111,33 +1131,17 @@ def generate(project_file, project_root, builders, apps, build_dir, _global):
         print(e)
         sys.exit(1)
 
-    print("laze: loading buildfiles took %.2fs" % (time.time() - before))
+    print("laze: loading %i buildfiles took %.2fs" % (len(files_set), time.time() - before))
 
     ninja_build_file = os.path.join(build_dir, "build.ninja")
+    ninja_build_args_file = os.path.join(build_dir, "build-args.ninja")
+    ninja_build_file_deps = ninja_build_file + ".d"
+
     writer = Writer(open(ninja_build_file, "w"))
-    #
     writer.variable("builddir", build_dir)
 
     # create rule for automatically re-running laze if necessary
-    relaze_rule = "laze"
-    if not _global:
-        relaze_rule += " -C%s" % start_dir
-    relaze_rule += " generate --project-root %s --project-file ${in}" % project_root
-    relaze_rule += " --global" if _global else " --local"
-    if builders:
-        relaze_rule += " --builders "
-        relaze_rule += ",".join(list(builders))
-    if apps:
-        relaze_rule += " --apps "
-        relaze_rule += ",".join(list(apps))
-
-    writer.rule("relaze", relaze_rule, restat=True, generator=True, pool="console")
-    writer.build(
-        rule="relaze",
-        outputs=ninja_build_file,
-        implicit=list(files_set),
-        inputs=os.path.abspath(project_file),
-    )
+    write_ninja_build_args_file(ninja_build_args_file, ninja_build_file, ninja_build_file_deps, args_file, build_dir)
 
     before = time.time()
     # PARSING PHASE
@@ -1179,16 +1183,13 @@ def generate(project_file, project_root, builders, apps, build_dir, _global):
     for dep, _set in depends.map.items():
         writer.build(rule="phony", outputs=dep, inputs=list(_set))
 
+    ## dump some data structures that build will pick up
     dump_dict((build_dir, "laze-tools"), App.global_tools)
     dump_dict((build_dir, "laze-app-per-folder"), App.global_app_per_folder)
 
-    args = {"builders": list(builders), "apps": list(apps), "global" : _global}
-    if not _global:
-        args["start_dir"] = start_dir
-
-    dump_args(build_dir, args)
-
     laze.mtimelog.write_log(os.path.join(build_dir, "laze-files.mp"), files_set)
+    with open(ninja_build_file_deps, "w") as f:
+        f.write(ninja_build_args_file + ": " + " ".join(files_set))
 
     # download external sources
     dl.start()
