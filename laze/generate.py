@@ -123,76 +123,80 @@ def yaml_load(
         raise ParseError(msg) from e
 
     res = []
-    for data in datas:
-        if import_root is not None:
-            data["_import_root"] = import_root
+    try:
+        for data in datas:
+            if import_root is not None:
+                data["_import_root"] = import_root
 
-        remember_imports()
+            remember_imports()
 
-        data_defaults = data.get("defaults", {})
+            data_defaults = data.get("defaults", {})
 
-        _defaults = defaults
-        if _defaults:
-            _defaults = deepcopy(_defaults)
-            if data_defaults:
-                merge(_defaults, data_defaults)
-        else:
-            _defaults = data_defaults
-
-        def merge_defaults(data, _defaults):
+            _defaults = defaults
             if _defaults:
-                # print("yaml_load(): merging defaults, base:    ", data)
-                # print("yaml_load(): merging defaults, defaults:", _defaults)
-                for defaults_key in _defaults.keys():
-                    if defaults_key not in data:
-                        continue
-                    data_val = data.get(defaults_key)
-                    defaults_val = _defaults[defaults_key]
-                    if type(data_val) == list:
-                        for entry in data_val:
-                            merge(entry, deepcopy(defaults_val), join_lists=True)
-                    else:
-                        # print("yaml_load(): merging defaults,", data_val)
-                        if data_val == None:
-                            data_val = {}
-                            data[defaults_key] = data_val
-                        merge(data_val, defaults_val, override=False, join_lists=True)
-                # print("yaml_load(): merging defaults, result:  ", data)
+                _defaults = deepcopy(_defaults)
+                if data_defaults:
+                    merge(_defaults, data_defaults)
+            else:
+                _defaults = data_defaults
 
-        merge_defaults(data, _defaults)
+            def merge_defaults(data, _defaults):
+                if _defaults:
+                    # print("yaml_load(): merging defaults, base:    ", data)
+                    # print("yaml_load(): merging defaults, defaults:", _defaults)
+                    for defaults_key in _defaults.keys():
+                        if defaults_key not in data:
+                            continue
+                        data_val = data.get(defaults_key)
+                        defaults_val = _defaults[defaults_key]
+                        if type(data_val) == list:
+                            for entry in data_val:
+                                merge(entry, deepcopy(defaults_val), join_lists=True)
+                        else:
+                            # print("yaml_load(): merging defaults,", data_val)
+                            if data_val == None:
+                                data_val = {}
+                                data[defaults_key] = data_val
+                            merge(data_val, defaults_val, override=False, join_lists=True)
+                    # print("yaml_load(): merging defaults, result:  ", data)
 
-        template = data.pop("template", None)
+            merge_defaults(data, _defaults)
 
-        if template:
-            result = []
-            i = 0
-            for repl in dict_list_product(template):
-                _data = deepcopy(data)
-                _data["_relpath"] = path
-                _data = deep_replace(_data, repl)
-                _data = do_include(_data)
-                _data["template_instance"] = repl
-                _data["template_instance_num"] = i
+            template = data.pop("template", None)
 
-                result.append(_data)
-                i += 1
-            res.extend(result)
-        else:
-            data = do_include(data)
-            data["_relpath"] = path
-            res.append(data)
-            for subdir in listify(data.get("subdirs", [])):
-                relpath = os.path.join(path, subdir)
-                res.extend(
-                    yaml_load(
-                        os.path.join(relpath, const.BUILDFILE_NAME),
-                        path=relpath,
-                        defaults=_defaults,
-                        parent=filename,
-                        imports=imports,
-                        import_root=import_root,
+            if template:
+                result = []
+                i = 0
+                for repl in dict_list_product(template):
+                    _data = deepcopy(data)
+                    _data["_relpath"] = path
+                    _data = deep_replace(_data, repl)
+                    _data = do_include(_data)
+                    _data["template_instance"] = repl
+                    _data["template_instance_num"] = i
+
+                    result.append(_data)
+                    i += 1
+                res.extend(result)
+            else:
+                data = do_include(data)
+                data["_relpath"] = path
+                res.append(data)
+                for subdir in listify(data.get("subdirs", [])):
+                    relpath = os.path.join(path, subdir)
+                    res.extend(
+                        yaml_load(
+                            os.path.join(relpath, const.BUILDFILE_NAME),
+                            path=relpath,
+                            defaults=_defaults,
+                            parent=filename,
+                            imports=imports,
+                            import_root=import_root,
+                        )
                     )
-                )
+    except yaml.parser.ParserError as e:
+        print(filename, e)
+        sys.exit(1)
 
     if parent is None:
         while imports:
