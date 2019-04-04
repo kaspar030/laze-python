@@ -2,7 +2,15 @@ import hashlib
 import json
 import os
 import traceback
+
+# try to use libyaml (faster C-based yaml lib),
+# fallback to pure python version
 import yaml
+try:
+    from yaml import CLoader as Loader, CDumper as Dumper
+except ImportError:
+    print("laze: warning: using slow python-based yaml loader")
+    from yaml import Loader, Dumper
 
 from collections import defaultdict
 from itertools import product
@@ -206,7 +214,7 @@ def dump_dict(path, data):
         data = default_to_regular(data)
 
     with open(path, "w") as f:
-        yaml.dump(data, f)
+        yaml.dump(data, f, Dumper=Dumper)
 
     return path
 
@@ -216,4 +224,4 @@ def load_dict(path):
         path = os.path.join(*path)
     path = path + ".yml"
 
-    return yaml.load(open(path))
+    return yaml.load(open(path), Loader=Loader)
