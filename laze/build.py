@@ -30,8 +30,9 @@ import laze.mtimelog
 @click.option("--clean", "-c", type=click.BOOL, is_flag=True, envvar="LAZE_CLEAN")
 @click.option("--jobs", "-j", type=click.INT, envvar="LAZE_JOBS")
 @click.option("--keep-going", "-k", type=click.INT, default=1, envvar="LAZE_JOBS")
+@click.option("--dump-data", "-d", is_flag=True, default=False, envvar="LAZE_DUMP_DATA")
 @click.argument("targets", nargs=-1)
-def build(project_file, project_root, build_dir, tool, targets, builders, no_update, _global, verbose, clean, jobs, keep_going):
+def build(project_file, project_root, build_dir, tool, targets, builders, no_update, _global, verbose, clean, jobs, keep_going, dump_data):
 
     targets = split(targets)
     builders = split(builders)
@@ -43,6 +44,7 @@ def build(project_file, project_root, build_dir, tool, targets, builders, no_upd
             "builders": builders,
             "_global": _global,
             "apps": targets,
+            "dump_data": dump_data,
             }
 
     start_dir, build_dir, project_root, project_file = determine_dirs(generate_args)

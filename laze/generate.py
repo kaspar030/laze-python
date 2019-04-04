@@ -812,7 +812,6 @@ class Module(Declaration):
                 merge(vars, dep_export_vars, join_lists=True)
 
         self.export_vars[context] = vars
-        print("EXPORT VARS", self.name, vars)
         return vars
 
     def vars_substitute(self, _vars, context):
@@ -858,6 +857,7 @@ class App(Module):
     global_app_per_folder = defaultdict(
         lambda: defaultdict(lambda: defaultdict(lambda: dict()))
     )
+    global_apps_data = dict()
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -880,21 +880,21 @@ class App(Module):
         if App.global_applist and not self.name in App.global_applist:
             return
 
-        print("APP", self.name)
-
+        appdict = App.global_apps_data[self.name] = {}
         for name, builder in Context.map.items():
             if builder.__class__ != Builder:
                 continue
 
+            builderdict = appdict[builder.name] = {}
             if not (
                 builder.listed(self.whitelist, empty_val=True)
                 and builder.listed(App.global_whitelist, empty_val=True)
             ):
-                print("NOT WHITELISTED:", self.name, builder.name)
+                builderdict["notbuilt_reason"] = "not whitelisted"
                 continue
 
             if builder.listed(self.blacklist):
-                print("BLACKLISTED:", self.name, builder.name)
+                builderdict["notbuilt_reason"] = "blacklisted"
                 continue
 
             #
@@ -924,7 +924,8 @@ class App(Module):
 
             context_vars = context.get_vars()
 
-            print("  build", self.name, "for", name)
+            print("laze:  building", self.name, "for", name)
+
             try:
                 modules = self.get_deps(context)
             except Module.NotAvailable as e:
@@ -934,6 +935,10 @@ class App(Module):
                     "for builder %s:" % context.parent.name,
                     e,
                 )
+                builderdict["notbuilt_reason"] = { "dependency missing": {
+                    "module": e.module,
+                    "missing": e.dependency
+                    }}
                 continue
 
             App.count += 1
@@ -951,29 +956,37 @@ class App(Module):
             #                 print("OPTIONAL DEP:", module.name, dep)
 
 
+            modules_dict = builderdict["modules"] = {}
             for module in modules:
                 module_set.add(module.name)
-                print("    %s:" % module.name, module.args.get("sources"))
-                _tmp = module.args.get("depends")
-                if _tmp:
-                    print("    %s: deps:" % module.name, _tmp)
-                _tmp = module.args.get("uses")
-                if _tmp:
-                    print("    %s: uses:" % module.name, _tmp)
-
                 module_global_vars = module.args.get("global_vars", {})
                 module_global_vars = module.vars_substitute(module_global_vars, context)
                 if module_global_vars:
                     merge(context_vars, module_global_vars, join_lists=True)
-                    print("    global_vars:", module_global_vars)
 
+                _sources = module.args.get("sources")
+                _deps = module.args.get("depends")
+                _uses = module.args.get("uses")
 
-            print("    %s:" % context, context_vars)
+                module_dict = modules_dict[module.name] = {}
+                module_dict["context"] = module.context.name
+
+                if _sources:
+                    module_dict["sources"] = listify(_sources)
+                if _deps:
+                    module_dict["deps"] = _deps.copy()
+                if _uses:
+                    module_dict["uses"] = _uses.copy()
+                if module_global_vars:
+                    module_dict["global_vars"] = module_global_vars
+
+            builderdict["context vars"] = context_vars
 
             global writer
             sources = []
             objects = []
             for module in modules:
+                module_dict = modules_dict[module.name]
                 _sources = listify(module.args.get("sources", []))
                 sources = []
 
@@ -984,26 +997,36 @@ class App(Module):
                             # splitting by comma enables multiple deps like "- a,b: file.c"
                             key = set(key.split(","))
                             if not key - module_set:
-                                print("OPTIONAL sources:", module.name, value)
-                                sources.extend(listify(value))
+                                _optional_sources = listify(value)
+                                module_dict.setdefault("optional sources used", []).extend(_optional_sources)
+                                sources.extend(_optional_sources)
                     else:
                         sources.append(source)
 
-                print("USES", module.name, module.args.setdefault("uses", []))
-                # print("MODULE_DEFINES", module.name, module_defines, module_set)
                 module_defines = module.get_defines(context, module_set)
 
                 module_vars = module.get_vars(context)
-                # print("EXPORT VARS", module.name, module.get_export_vars(context, module_set))
-                merge(
-                    module_vars, deepcopy(module.get_export_vars(context, module_set))
-                )
+
+                module_export_vars = module.get_export_vars(context, module_set)
+                if module_export_vars:
+                    module_export_vars = deepcopy(module_export_vars)
+                    merge(
+                        module_vars, module_export_vars
+                    )
+                    module_dict["export_vars"] = module_export_vars
 
                 # add "-DMODULE_<module_name> for each used/depended module
                 if module_defines:
                     module_vars = deepcopy(module_vars)
                     cflags = module_vars.setdefault("CFLAGS", [])
                     cflags.extend(module_defines)
+
+                if module_vars:
+                    module_dict["vars"] = module_vars
+
+                module_used = module.get_used(context, module_set)
+                if module_used:
+                    module_dict["used"] = [x.name for x in module_used]
 
                 for source in sources:
                     source_in = module.locate_source(source)
@@ -1017,11 +1040,16 @@ class App(Module):
                     # print ( source) # , module.get_vars(context), rule.name)
 
             link = Rule.get_by_name("LINK")
-            outfile = self.args.get("outfile",
-                    context.get_filepath(os.path.basename(self.name)) + ".elf")
+            try:
+                outfile = context.get_filepath(self.args["outfile"])
+            except KeyError:
+                outfile = context.get_filepath(os.path.basename(self.name)) + ".elf"
+
+            builderdict["outfile"] = outfile
 
             link_vars = context.get_vars()
             merge(link_vars, self.get_export_vars(context, module_set))
+
             res = link.to_ninja_build(writer, objects, outfile, link_vars)
             if res != outfile:
                 # An identical binary has been built for another Application.
@@ -1029,6 +1057,8 @@ class App(Module):
                 # symbolic link.
                 symlink = Rule.get_by_name("SYMLINK")
                 symlink.to_ninja_build(writer, res, outfile)
+                builderdict["outfile_real"] = res
+
 
             depends(context.parent.name, outfile)
             depends(self.name, outfile)
@@ -1042,11 +1072,12 @@ class App(Module):
             if tools:
                 module_vars_flattened = context.flatten_vars(module_vars)
 
+                tools_dict = builderdict["tools"] = {}
                 for tool_name, spec in tools.items():
-                    dprint(
-                        "verbose",
-                        "laze: app %s supports tool %s" % (self.name, tool_name),
-                    )
+                    #dprint(
+                    #    "verbose",
+                    #    "laze: app %s supports tool %s" % (self.name, tool_name),
+                    #)
                     if type(spec) == str:
                         cmd = [str]
                         spec = {}
@@ -1068,6 +1099,8 @@ class App(Module):
                     # spec["target"] = outfile
 
                     App.global_tools[outfile][tool_name] = spec
+                    tools_dict[tool_name] = spec
+
 
             App.global_app_per_folder[self.relpath][self.name][builder.name] = outfile
 
@@ -1091,6 +1124,7 @@ class_map = {
 )
 @click.option("--global/--local", "-g/-l", "_global", default=False, envvar="LAZE_GLOBAL")
 @click.option("--args-file", "-A", type=click.Path(), envvar="LAZE_ARGS_FILE")
+@click.option("--dump-data", "-d", is_flag=True, default=False, envvar="LAZE_DUMP_DATA")
 def generate(**kwargs):
     global writer
     global global_build_dir
@@ -1186,6 +1220,11 @@ def generate(**kwargs):
     ## dump some data structures that build will pick up
     dump_dict((build_dir, "laze-tools"), App.global_tools)
     dump_dict((build_dir, "laze-app-per-folder"), App.global_app_per_folder)
+
+    ## optionally dump info struct
+    if args.get("dump_data"):
+        print("laze: dumping data")
+        dump_dict((build_dir, "laze-data"), App.global_apps_data)
 
     laze.mtimelog.write_log(os.path.join(build_dir, "laze-files.mp"), files_set)
     with open(ninja_build_file_deps, "w") as f:
