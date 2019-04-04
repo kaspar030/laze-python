@@ -33,6 +33,8 @@ from .util import (
     deep_replace,
     deep_substitute,
     deep_safe_substitute,
+    flatten_var,
+    flatten_vars,
     static_vars,
     split,
 )
@@ -421,12 +423,6 @@ class Context(Declaration):
         else:
             return False
 
-    def flatten_vars(self, vars):
-        res = {}
-        for name, _list in vars.items():
-            res[name] = " ".join(listify(_list))
-        return res
-
 
 class Builder(Context):
     pass
@@ -516,20 +512,6 @@ class Rule(Declaration):
         )
 
     def to_ninja_build(self, writer, _in, _out, _vars=None):
-        def control_key(x):
-            """ var sort helper key function
-
-            Sorts strings starting with < to the beginning,
-            starting with > to the end.
-            """
-
-            x = x[0]
-            if x == "<":
-                return 0
-            elif x == ">":
-                return 2
-            return 1
-
         _vars = _vars or {}
         #print("RULE", self.name, _in, _out, _vars)
         vars = {}
@@ -539,11 +521,7 @@ class Rule(Declaration):
                 try:
                     data = self.process_var_options(name, data)
                 except KeyError:
-                    if type(data) == list:
-                        data.sort(key=control_key)
-                        # drop \, < > if it is at the beginning of a string.
-                        data[:] = [x[1:] if x[0] in "\<>" else x for x in data]
-                        data = " ".join(data)
+                    pass
                 vars[name] = data
             except KeyError:
                 pass
@@ -822,7 +800,7 @@ class Module(Declaration):
         }
 
         deep_safe_substitute(_vars, _dict)
-        return deep_substitute(_vars, context.flatten_vars(context.get_vars()))
+        return deep_substitute(_vars, flatten_vars(context.get_vars()))
 
     def uses_all(self):
         return "all" in listify(self.args.get("uses", []))
@@ -1028,6 +1006,7 @@ class App(Module):
                 if module_used:
                     module_dict["used"] = [x.name for x in module_used]
 
+                module_vars_flattened = flatten_vars(module_vars)
                 for source in sources:
                     source_in = module.locate_source(source)
                     rule = Rule.get_by_extension(source)
@@ -1035,7 +1014,7 @@ class App(Module):
                     obj = context.get_filepath(
                         os.path.join(module.relpath, source[:-2] + rule.args.get("out"))
                     )
-                    obj = rule.to_ninja_build(writer, source_in, obj, module_vars)
+                    obj = rule.to_ninja_build(writer, source_in, obj, module_vars_flattened)
                     objects.append(obj)
                     # print ( source) # , module.get_vars(context), rule.name)
 
@@ -1047,10 +1026,7 @@ class App(Module):
 
             builderdict["outfile"] = outfile
 
-            link_vars = context.get_vars()
-            merge(link_vars, self.get_export_vars(context, module_set))
-
-            res = link.to_ninja_build(writer, objects, outfile, link_vars)
+            res = link.to_ninja_build(writer, objects, outfile, flatten_vars(context_vars))
             if res != outfile:
                 # An identical binary has been built for another Application.
                 # As the binary can be considered a final target, create a file
@@ -1070,7 +1046,7 @@ class App(Module):
             # handle tools
             tools = context.get_tools()
             if tools:
-                module_vars_flattened = context.flatten_vars(module_vars)
+                module_vars_flattened = flatten_vars(module_vars)
 
                 tools_dict = builderdict["tools"] = {}
                 for tool_name, spec in tools.items():

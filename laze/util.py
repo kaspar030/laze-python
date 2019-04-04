@@ -33,7 +33,7 @@ def uniquify(seq):
     """
 
     seen = set()
-    return [x for x in seq if x not in seen and not seen.add(x)]
+    return [x for x in seq if isinstance(x, dict) or (x not in seen and not seen.add(x))]
 
 
 def print_exception():
@@ -167,6 +167,25 @@ def merge(
             if not only_existing:
                 a[key] = b[key]
     return a
+
+
+def flatten_var(var):
+    removes = set()
+    var_list = listify(var)
+    for entry in var_list:
+        if isinstance(entry, dict):
+            remove_list = entry.get("remove")
+            if remove_list:
+                removes.update(listify(remove_list))
+
+    return " ".join([x for x in var_list if not (isinstance(x, dict) or x in removes)])
+
+
+def flatten_vars(vars):
+    res = {}
+    for name, _list in vars.items():
+        res[name] = flatten_var(_list)
+    return res
 
 
 def static_vars(**kwargs):
