@@ -1089,23 +1089,19 @@ class_map = {
 @click.option(
     "--build-dir", "-B", type=click.STRING, default="build", envvar="LAZE_BUILDDIR"
 )
-#@click.option( "--start-dir", "-S", type=click.STRING, envvar="LAZE_STARTDIR")
 @click.option("--global/--local", "-g/-l", "_global", default=False, envvar="LAZE_GLOBAL")
 @click.option("--args-file", "-A", type=click.Path(), envvar="LAZE_ARGS_FILE")
 def generate(**kwargs):
     global writer
     global global_build_dir
 
-    kwargs["apps"] = split(kwargs.get("apps"))
-    kwargs["builders"] = split(kwargs.get("builders"))
-
     args_file = kwargs.get("args_file")
     if args_file:
+        # TODO: allow overriding via command line?
         args = yaml.load(open(args_file, "r"))
-        for key, value in kwargs.items():
-            if value is not None:
-                args[key] = value
     else:
+        kwargs["apps"] = split(kwargs.get("apps"))
+        kwargs["builders"] = split(kwargs.get("builders"))
         args = kwargs
 
     _global   = args.get("_global")
