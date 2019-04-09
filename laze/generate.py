@@ -970,6 +970,8 @@ class App(Module):
 
                 # handle optional sources ("- optional_module: file.c")
                 for source in _sources:
+                    if source is None:
+                        continue
                     if type(source) == dict:
                         for key, value in source.items():
                             # splitting by comma enables multiple deps like "- a,b: file.c"
