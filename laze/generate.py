@@ -322,6 +322,8 @@ class Context(Declaration):
         self.vars = None
         self.tools = None
 
+        self.var_options = None
+
         self.bindir = self.args.get(
             "bindir", os.path.join(self.args.get("_builddir"), "bin", self.name)
         )
@@ -350,6 +352,7 @@ class Context(Declaration):
                 context.parent.children.append(context)
                 depends(context.parent.name, name)
 
+
     def vars_substitute(self, _vars):
         _dict = {
             "relpath": self.relpath.rstrip("/") or ".",
@@ -357,6 +360,65 @@ class Context(Declaration):
         }
 
         return deep_substitute(_vars, _dict)
+
+    def process_var_options(self, _vars):
+        def apply_var_options(opts, data):
+            """ interpret smart options.
+
+            Use like e.g.,
+                var_options:
+                  includes:
+                    prefix: -I
+
+            to get a list of path names joined as C include arguments.
+            [ "include/foo", "include/bar" ] -> "-Iinclude/foo -Iinclude/bar"
+            """
+
+            joiner = opts.get("joiner", " ")
+            prefix = opts.get("prefix", "")
+            suffix = opts.get("suffix", "")
+            start = opts.get("start", "")
+            end = opts.get("end", "")
+
+            return (
+                start
+                + joiner.join([prefix + entry + suffix for entry in data])
+                + end
+            )
+
+        var_opts = self.get_var_options()
+
+        tmp = None
+        for key, value in _vars.items():
+            opts = var_opts.get(key)
+            if opts is None:
+                continue
+
+            if tmp is None:
+                tmp = {}
+
+            tmp[key] = apply_var_options(opts, listify(value))
+
+        if tmp:
+            _vars.update(tmp)
+
+        return _vars
+
+    def get_var_options(self):
+        if self.var_options is not None:
+            pass
+
+        else:
+            own_opts = self.args.get("var_options")
+            if self.parent:
+                popts = deepcopy(self.parent.get_var_options())
+                if own_opts is not None:
+                    popts.update(own_opts)
+                self.var_options = popts
+            else:
+                self.var_options = own_opts or {}
+
+        return self.var_options
 
     def get_module(self, module_name):
         #        print("get_module()", s, s.modules.keys())
@@ -474,7 +536,7 @@ class Rule(Declaration):
             if not name in {"in", "out"}:
                 var_names.append(name)
         #print("RULE", self.name, "vars:", var_names)
-        self.var_list = var_names
+        self.var_set = set(var_names)
 
     def to_ninja(self, writer):
         writer.rule(
@@ -485,47 +547,14 @@ class Rule(Declaration):
             depfile=self.depfile,
         )
 
-    def process_var_options(self, name, data):
-        """ interpret smart options.
-
-        Use like e.g.,
-            var_options:
-              includes:
-                prefix: -I
-
-        to get a list of path names joined as C include arguments.
-        [ "include/foo", "include/bar" ] -> "-Iinclude/foo -Iinclude/bar"
-        """
-
-        opts = self.args["var_options"][name]
-
-        joiner = opts.get("joiner", " ")
-        prefix = opts.get("prefix", "")
-        suffix = opts.get("suffix", "")
-        start = opts.get("start", "")
-        end = opts.get("end", "")
-
-        return (
-            start
-            + joiner.join([prefix + entry + suffix for entry in listify(data)])
-            + end
-        )
-
     def to_ninja_build(self, writer, _in, _out, _vars=None):
         _vars = _vars or {}
         #print("RULE", self.name, _in, _out, _vars)
-        vars = {}
-        for name in self.var_list:
-            try:
-                data = _vars[name]
-                try:
-                    data = self.process_var_options(name, data)
-                except KeyError:
-                    pass
-                vars[name] = data
-            except KeyError:
-                pass
 
+        # filter _vars by variable names from self.var_set
+        vars = { k: v for k, v in _vars.items() if k in self.var_set }
+
+        # create a cache key from everything but the output
         cache_key = hash(
             "rule:%s in:%s vars:%s" % (self.name, _in, hash(frozenset(vars.items())))
         )
@@ -1008,6 +1037,7 @@ class App(Module):
                 if module_used:
                     module_dict["used"] = [x.name for x in module_used]
 
+                module_vars = context.process_var_options(module_vars)
                 module_vars_flattened = flatten_vars(module_vars)
                 for source in sources:
                     source_in = module.locate_source(source)
@@ -1028,6 +1058,7 @@ class App(Module):
 
             builderdict["outfile"] = outfile
 
+            context_vars = context.process_var_options(context_vars)
             res = link.to_ninja_build(writer, objects, outfile, flatten_vars(context_vars))
             if res != outfile:
                 # An identical binary has been built for another Application.
