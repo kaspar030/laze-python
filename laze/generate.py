@@ -359,7 +359,7 @@ class Context(Declaration):
             "root": self.root.rstrip("/") or ".",
         }
 
-        return deep_substitute(_vars, _dict)
+        return deep_safe_substitute(_vars, _dict)
 
     def process_var_options(self, _vars):
         def apply_var_options(opts, data):
