@@ -91,6 +91,8 @@ def deep_substitute(_vars, _dict):
             for n, entry in enumerate(v):
                 if "$" in entry:
                     v[n] = Template(entry).substitute(_dict)
+        elif type(v) == dict:
+            _vars[k] = deep_substitute(v, _dict)
         else:
             if "$" in v:
                 _vars[k] = Template(v).substitute(_dict)
@@ -98,7 +100,7 @@ def deep_substitute(_vars, _dict):
     return _vars
 
 def deep_safe_substitute(_vars, _dict):
-    """ for each key in vars, do Template substitution
+    """ for each key in vars, do "safe" Template substitution
 
     if value is a list, substitute each list member.
     """
@@ -108,6 +110,8 @@ def deep_safe_substitute(_vars, _dict):
             for n, entry in enumerate(v):
                 if "$" in entry:
                     v[n] = Template(entry).safe_substitute(_dict)
+        elif type(v) == dict:
+            _vars[k] = deep_safe_substitute(v, _dict)
         else:
             if "$" in v:
                 _vars[k] = Template(v).safe_substitute(_dict)
