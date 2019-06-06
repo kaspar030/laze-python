@@ -13,7 +13,7 @@ except ImportError:
     from yaml import Loader, Dumper
 
 from collections import defaultdict
-from itertools import product
+from itertools import product, chain
 from string import Template
 
 def listify(something):
@@ -172,13 +172,26 @@ def merge(
 def flatten_var(var):
     removes = set()
     var_list = listify(var)
+    prefixes = []
+    suffixes = []
     for entry in var_list:
         if isinstance(entry, dict):
             remove_list = entry.get("remove")
             if remove_list:
                 removes.update(listify(remove_list))
+                continue
 
-    return " ".join([x for x in var_list if not (isinstance(x, dict) or x in removes)])
+            prefix_list = entry.get("prefix")
+            if prefix_list:
+                prefixes.extend(prefix_list)
+                continue
+
+            suffix_list = entry.get("suffix")
+            if suffix_list:
+                suffixes.extend(suffix_list)
+                continue
+
+    return " ".join([x for x in chain(prefixes, var_list, suffixes) if not (isinstance(x, dict) or x in removes)])
 
 
 def flatten_vars(vars):
