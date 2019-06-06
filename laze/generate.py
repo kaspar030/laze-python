@@ -863,8 +863,7 @@ class Module(Declaration):
             "srcdir": self.locate_source(""),
         }
 
-        deep_safe_substitute(_vars, _dict)
-        return deep_substitute(_vars, flatten_vars(context.get_vars()))
+        return deep_safe_substitute(_vars, _dict)
 
     def uses_all(self):
         return "all" in listify(self.args.get("uses", []))
@@ -1062,7 +1061,7 @@ class App(Module):
                     module_dict["used"] = [x.name for x in module_used]
 
                 module_vars = context.process_var_options(module_vars)
-                module_vars_flattened = flatten_vars(module_vars)
+                module_vars_flattened = flatten_vars(deep_substitute(module_vars, module_vars))
                 for source in sources:
                     source_in = module.locate_source(source)
                     rule = Rule.get_by_extension(source)
@@ -1083,7 +1082,8 @@ class App(Module):
             builderdict["outfile"] = outfile
 
             context_vars = context.process_var_options(context_vars)
-            res = link.to_ninja_build(writer, objects, outfile, flatten_vars(context_vars))
+            link_vars = flatten_vars(deep_substitute(context_vars, context_vars))
+            res = link.to_ninja_build(writer, objects, outfile, link_vars)
             if res != outfile:
                 # An identical binary has been built for another Application.
                 # As the binary can be considered a final target, create a file
