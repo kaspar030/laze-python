@@ -644,6 +644,23 @@ class Module(Declaration):
                         # splitting by comma enables multiple deps like "- a,b: file.c"
                         uses.extend(key.split(","))
 
+        # parse optional dependencies
+        # (if X is in module set, depend on Y)
+        self.depends_optional = {}
+
+        for dep in depends:
+            if type(dep) == dict:
+                for k, v in dep.items():
+                    v = listify(v)
+                    self.depends_optional.setdefault(k, set()).update(v)
+                    uses.extend(v)
+
+        depends[:] = [ x for x in depends if type(x) != dict ]
+
+        if self.depends_optional:
+            print("OPTIONAL DEPENDENCIES:", self.name, self.depends_optional)
+
+        # remove entries starting with "-"
         list_remove(uses)
         list_remove(depends)
 
@@ -693,7 +710,7 @@ class Module(Declaration):
 
             dl.add_to_queue(download, dldir)
 
-    def get_deps(self, context, resolved=None, unresolved=None):
+    def get_deps(self, context, resolved=None, unresolved=None, optional=None):
         if resolved is None:
             try:
                 return self.depends_cache[context]
@@ -704,11 +721,14 @@ class Module(Declaration):
 
             resolved = []
             unresolved = set()
+            optional = set()
             recursed = False
         else:
             recursed = True
 
         unresolved.add(self)
+        if self.depends_optional:
+            optional.add(self)
 
         for dep_name in self.depends:
             # (handle if X is in module_set, depend on Y)
@@ -738,12 +758,27 @@ class Module(Declaration):
                     #print("skip dep %s -> %s" %(self.name, dep.name))
                     continue
 
-                dep.get_deps(context, resolved, unresolved)
+                dep.get_deps(context, resolved, unresolved, optional)
 
         resolved.append(self)
         unresolved.discard(self)
 
         if recursed is False:
+            while True:
+                resolved_names = { x.name for x in resolved }
+                for dep in optional:
+                    for k, v in dep.depends_optional.items():
+                        if k in resolved_names:
+                            for optdep in v:
+                                if not optdep in resolved_names:
+                                    unresolved.add(context.get_module(optdep))
+                if unresolved:
+                    print("new optional deps:", [ x.name for x in unresolved])
+                    for dep in list(unresolved):
+                        dep.get_deps(context, resolved, unresolved, optional)
+                    continue
+                break
+
             _reversed = uniquify(reversed(resolved))
             self.depends_cache[context] = _reversed
             #print("get_deps() resolved to", self.name, [ x.name for x in _reversed ])
@@ -951,17 +986,6 @@ class App(Module):
             App.count += 1
 
             module_set = set()
-            ## beginning of optional dependencies
-            # (if X is in module set, depend on Y)
-            # modules_depend_optional = {}
-            # for module in modules:
-            #     module_set.add(module.name)
-            #     _tmp = module.args.get("depends")
-            #     if _tmp:
-            #         for dep in _tmp:
-            #             if type(dep) == dict:
-            #                 print("OPTIONAL DEP:", module.name, dep)
-
 
             modules_dict = builderdict["modules"] = {}
             for module in modules:
