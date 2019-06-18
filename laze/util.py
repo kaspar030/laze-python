@@ -6,15 +6,17 @@ import traceback
 # try to use libyaml (faster C-based yaml lib),
 # fallback to pure python version
 import yaml
+
 try:
     from yaml import CLoader as Loader, CDumper as Dumper
 except ImportError:
     print("laze: warning: using slow python-based yaml loader")
-    from yaml import Loader, Dumper
+    from yaml import Loader, Dumper  # type: ignore
 
 from collections import defaultdict
 from itertools import product, chain
 from string import Template
+
 
 def listify(something):
     """ if something is a list, return it.  else, return [something]."""
@@ -33,7 +35,9 @@ def uniquify(seq):
     """
 
     seen = set()
-    return [x for x in seq if isinstance(x, dict) or (x not in seen and not seen.add(x))]
+    return [
+        x for x in seq if isinstance(x, dict) or (x not in seen and not seen.add(x))
+    ]
 
 
 def print_exception():
@@ -98,6 +102,7 @@ def deep_substitute(_vars, _dict):
                 _vars[k] = Template(v).substitute(_dict)
 
     return _vars
+
 
 def deep_safe_substitute(_vars, _dict):
     """ for each key in vars, do "safe" Template substitution
@@ -195,7 +200,13 @@ def flatten_var(var):
                 suffixes.extend(suffix_list)
                 continue
 
-    return " ".join([x for x in chain(prefixes, var_list, suffixes) if not (isinstance(x, dict) or x in removes)])
+    return " ".join(
+        [
+            x
+            for x in chain(prefixes, var_list, suffixes)
+            if not (isinstance(x, dict) or x in removes)
+        ]
+    )
 
 
 def flatten_vars(vars):
@@ -224,6 +235,7 @@ def split(_list, splitter=","):
 
     return tmp
 
+
 def _dict_digest(_dict):
     return hashlib.sha1(json.dumps(_dict, sort_keys=True).encode("utf-8"))
 
@@ -234,6 +246,7 @@ def dict_digest(_dict):
 
 def dict_hexdigest(_dict):
     return _dict_digest(_dict).hexdigest()
+
 
 def default_to_regular(d):
     if isinstance(d, defaultdict):

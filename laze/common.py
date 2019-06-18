@@ -59,7 +59,10 @@ def determine_dirs(args):
             project_file = const.PROJECTFILE_NAME
             project_root = locate_project_root(start_dir)
             if project_root is None:
-                print('laze: error: could not locate folder containing "%s"' % project_file)
+                print(
+                    'laze: error: could not locate folder containing "%s"'
+                    % project_file
+                )
                 sys.exit(1)
 
             project_file = os.path.normpath(os.path.join(project_root, project_file))
@@ -68,7 +71,11 @@ def determine_dirs(args):
             project_root = os.path.abspath(project_root)
             project_file = os.path.abspath(project_file)
 
-        dprint("verbose", 'laze: using project root "%s", project file "%s"' % (project_root, project_file))
+        dprint(
+            "verbose",
+            'laze: using project root "%s", project file "%s"'
+            % (project_root, project_file),
+        )
 
         project_file = os.path.relpath(project_file, project_root)
 
@@ -83,6 +90,7 @@ def determine_dirs(args):
 
     return start_dir, build_dir, project_root, project_file
 
+
 def dump_args(builddir, args):
     args.pop("args_file", None)
     return dump_dict((builddir, "laze-args"), args)
@@ -94,23 +102,26 @@ def rel_start_dir(start_dir, project_root):
     return rel_start_dir
 
 
-def write_ninja_build_args_file(ninja_build_args_file, ninja_build_file, ninja_build_file_deps, args_file, build_dir):
+def write_ninja_build_args_file(
+    ninja_build_args_file, ninja_build_file, ninja_build_file_deps, args_file, build_dir
+):
     writer = Writer(open(ninja_build_args_file, "w"))
     writer.variable("builddir", build_dir)
 
     relaze_cmd = "%s generate --args-file ${in}" % sys.argv[0]
 
-    writer.rule("relaze", relaze_cmd, restat=True, generator=True, pool="console",
-            depfile=ninja_build_file_deps,
-            deps="gcc",
-            )
+    writer.rule(
+        "relaze",
+        relaze_cmd,
+        restat=True,
+        generator=True,
+        pool="console",
+        depfile=ninja_build_file_deps,
+        deps="gcc",
+    )
 
     writer.build(
-        rule="relaze",
-        outputs=ninja_build_file,
-        inputs=os.path.abspath(args_file),
+        rule="relaze", outputs=ninja_build_file, inputs=os.path.abspath(args_file)
     )
 
     writer.build(rule="phony", outputs="relaze", inputs=ninja_build_file)
-
-

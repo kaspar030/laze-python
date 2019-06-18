@@ -9,6 +9,7 @@ import yaml
 # try to use libyaml (faster C-based yaml lib),
 # fallback to pure python version
 from yaml import load, dump
+
 try:
     from yaml import CLoader as Loader, CDumper as Dumper
 except ImportError:
@@ -48,7 +49,7 @@ from laze.common import (
     determine_dirs,
     dump_args,
     rel_start_dir,
-    write_ninja_build_args_file
+    write_ninja_build_args_file,
 )
 
 import laze.mtimelog
@@ -159,7 +160,9 @@ def yaml_load(
                             if data_val == None:
                                 data_val = {}
                                 data[defaults_key] = data_val
-                            merge(data_val, defaults_val, override=False, join_lists=True)
+                            merge(
+                                data_val, defaults_val, override=False, join_lists=True
+                            )
                     # print("yaml_load(): merging defaults, result:  ", data)
 
             merge_defaults(data, _defaults)
@@ -352,7 +355,6 @@ class Context(Declaration):
                 context.parent.children.append(context)
                 depends(context.parent.name, name)
 
-
     def vars_substitute(self, _vars):
         _dict = {
             "relpath": self.relpath.rstrip("/") or ".",
@@ -381,9 +383,7 @@ class Context(Declaration):
             end = opts.get("end", "")
 
             return (
-                start
-                + joiner.join([prefix + entry + suffix for entry in data])
-                + end
+                start + joiner.join([prefix + entry + suffix for entry in data]) + end
             )
 
         var_opts = self.get_var_options()
@@ -535,7 +535,7 @@ class Rule(Declaration):
             name = name[2:-1]
             if not name in {"in", "out"}:
                 var_names.append(name)
-        #print("RULE", self.name, "vars:", var_names)
+        # print("RULE", self.name, "vars:", var_names)
         self.var_set = set(var_names)
 
     def to_ninja(self, writer):
@@ -549,10 +549,10 @@ class Rule(Declaration):
 
     def to_ninja_build(self, writer, _in, _out, _vars=None):
         _vars = _vars or {}
-        #print("RULE", self.name, _in, _out, _vars)
+        # print("RULE", self.name, _in, _out, _vars)
 
         # filter _vars by variable names from self.var_set
-        vars = { k: v for k, v in _vars.items() if k in self.var_set }
+        vars = {k: v for k, v in _vars.items() if k in self.var_set}
 
         # create a cache key from everything but the output
         cache_key = hash(
@@ -655,7 +655,7 @@ class Module(Declaration):
                     self.depends_optional.setdefault(k, set()).update(v)
                     uses.extend(v)
 
-        depends[:] = [ x for x in depends if type(x) != dict ]
+        depends[:] = [x for x in depends if type(x) != dict]
 
         if self.depends_optional:
             print("OPTIONAL DEPENDENCIES:", self.name, self.depends_optional)
@@ -717,7 +717,7 @@ class Module(Declaration):
             except KeyError:
                 pass
 
-            #print("get_deps()", self.name)
+            # print("get_deps()", self.name)
 
             resolved = []
             unresolved = set()
@@ -732,7 +732,7 @@ class Module(Declaration):
 
         for dep_name in self.depends:
             # (handle if X is in module_set, depend on Y)
-            #if type(dep_name) == dict:
+            # if type(dep_name) == dict:
             #    # HANDLE
             #    continue
 
@@ -755,7 +755,7 @@ class Module(Declaration):
 
             if dep not in resolved:
                 if dep in unresolved:
-                    #print("skip dep %s -> %s" %(self.name, dep.name))
+                    # print("skip dep %s -> %s" %(self.name, dep.name))
                     continue
 
                 dep.get_deps(context, resolved, unresolved, optional)
@@ -765,7 +765,7 @@ class Module(Declaration):
 
         if recursed is False:
             while True:
-                resolved_names = { x.name for x in resolved }
+                resolved_names = {x.name for x in resolved}
                 for dep in optional:
                     for k, v in dep.depends_optional.items():
                         if k in resolved_names:
@@ -773,7 +773,7 @@ class Module(Declaration):
                                 if not optdep in resolved_names:
                                     unresolved.add(context.get_module(optdep))
                 if unresolved:
-                    print("new optional deps:", [ x.name for x in unresolved])
+                    print("new optional deps:", [x.name for x in unresolved])
                     for dep in list(unresolved):
                         dep.get_deps(context, resolved, unresolved, optional)
                     continue
@@ -781,7 +781,7 @@ class Module(Declaration):
 
             _reversed = uniquify(reversed(resolved))
             self.depends_cache[context] = _reversed
-            #print("get_deps() resolved to", self.name, [ x.name for x in _reversed ])
+            # print("get_deps() resolved to", self.name, [ x.name for x in _reversed ])
             return _reversed
 
     def get_used(self, context, module_set):
@@ -815,7 +815,7 @@ class Module(Declaration):
         for dep in chain(self.get_deps(context), self.get_used(context, module_set)):
             if dep not in resolved:
                 if dep in unresolved:
-                    #print("skip dep %s -> %s" %(self.name, dep.name))
+                    # print("skip dep %s -> %s" %(self.name, dep.name))
                     continue
 
                 dep.get_used_deps(context, module_set, resolved, unresolved)
@@ -847,7 +847,7 @@ class Module(Declaration):
         vars = {}
 
         for dep in self.get_used_deps(context, module_set):
-            #print("get_export_vars", self.name, dep.name)
+            # print("get_export_vars", self.name, dep.name)
             dep_export_vars = dep.args.get("export_vars", {})
             if dep_export_vars:
                 dep_export_vars = dep.vars_substitute(dep_export_vars, context)
@@ -946,7 +946,7 @@ class App(Module):
                 vars={"builder": name},
                 tools=self.tools,
                 _relpath=self.relpath,
-                _builddir=self.args.get("_builddir")
+                _builddir=self.args.get("_builddir"),
             )
 
             #
@@ -976,10 +976,9 @@ class App(Module):
                     "for builder %s:" % context.parent.name,
                     e,
                 )
-                builderdict["notbuilt_reason"] = { "dependency missing": {
-                    "module": e.module,
-                    "missing": e.dependency
-                    }}
+                builderdict["notbuilt_reason"] = {
+                    "dependency missing": {"module": e.module, "missing": e.dependency}
+                }
                 continue
 
             App.count += 1
@@ -1030,7 +1029,9 @@ class App(Module):
                             key = set(key.split(","))
                             if not key - module_set:
                                 _optional_sources = listify(value)
-                                module_dict.setdefault("optional sources used", []).extend(_optional_sources)
+                                module_dict.setdefault(
+                                    "optional sources used", []
+                                ).extend(_optional_sources)
                                 sources.extend(_optional_sources)
                     else:
                         sources.append(source)
@@ -1042,9 +1043,7 @@ class App(Module):
                 module_export_vars = module.get_export_vars(context, module_set)
                 if module_export_vars:
                     module_export_vars = deepcopy(module_export_vars)
-                    merge(
-                        module_vars, module_export_vars
-                    )
+                    merge(module_vars, module_export_vars)
                     module_dict["export_vars"] = module_export_vars
 
                 # add "-DMODULE_<module_name> for each used/depended module
@@ -1061,7 +1060,9 @@ class App(Module):
                     module_dict["used"] = [x.name for x in module_used]
 
                 module_vars = context.process_var_options(module_vars)
-                module_vars_flattened = flatten_vars(deep_substitute(module_vars, module_vars))
+                module_vars_flattened = flatten_vars(
+                    deep_substitute(module_vars, module_vars)
+                )
                 for source in sources:
                     source_in = module.locate_source(source)
                     rule = Rule.get_by_extension(source)
@@ -1069,7 +1070,9 @@ class App(Module):
                     obj = context.get_filepath(
                         os.path.join(module.relpath, source[:-2] + rule.args.get("out"))
                     )
-                    obj = rule.to_ninja_build(writer, source_in, obj, module_vars_flattened)
+                    obj = rule.to_ninja_build(
+                        writer, source_in, obj, module_vars_flattened
+                    )
                     objects.append(obj)
                     # print ( source) # , module.get_vars(context), rule.name)
 
@@ -1092,7 +1095,6 @@ class App(Module):
                 symlink.to_ninja_build(writer, res, outfile)
                 builderdict["outfile_real"] = res
 
-
             depends(context.parent.name, outfile)
             depends(self.name, outfile)
             depends("%s:%s" % (self.name, name), outfile)
@@ -1107,10 +1109,10 @@ class App(Module):
 
                 tools_dict = builderdict["tools"] = {}
                 for tool_name, spec in tools.items():
-                    #dprint(
+                    # dprint(
                     #    "verbose",
                     #    "laze: app %s supports tool %s" % (self.name, tool_name),
-                    #)
+                    # )
                     if type(spec) == str:
                         cmd = [str]
                         spec = {}
@@ -1134,7 +1136,6 @@ class App(Module):
                     App.global_tools[outfile][tool_name] = spec
                     tools_dict[tool_name] = spec
 
-
             App.global_app_per_folder[self.relpath][self.name][builder.name] = outfile
 
 
@@ -1155,7 +1156,9 @@ class_map = {
 @click.option(
     "--build-dir", "-B", type=click.STRING, default="build", envvar="LAZE_BUILDDIR"
 )
-@click.option("--global/--local", "-g/-l", "_global", default=False, envvar="LAZE_GLOBAL")
+@click.option(
+    "--global/--local", "-g/-l", "_global", default=False, envvar="LAZE_GLOBAL"
+)
 @click.option("--args-file", "-A", type=click.Path(), envvar="LAZE_ARGS_FILE")
 @click.option("--dump-data", "-d", is_flag=True, default=False, envvar="LAZE_DUMP_DATA")
 def generate(**kwargs):
@@ -1171,10 +1174,10 @@ def generate(**kwargs):
         kwargs["builders"] = split(kwargs.get("builders"))
         args = kwargs
 
-    _global   = args.get("_global")
-    apps      = args.get("apps")
+    _global = args.get("_global")
+    apps = args.get("apps")
     blacklist = args.get("blacklist")
-    builders  = args.get("builders")
+    builders = args.get("builders")
 
     start_dir, build_dir, project_root, project_file = determine_dirs(args)
     global_build_dir = build_dir
@@ -1198,7 +1201,10 @@ def generate(**kwargs):
         print(e)
         sys.exit(1)
 
-    print("laze: loading %i buildfiles took %.2fs" % (len(files_set), time.time() - before))
+    print(
+        "laze: loading %i buildfiles took %.2fs"
+        % (len(files_set), time.time() - before)
+    )
 
     ninja_build_file = os.path.join(build_dir, "build.ninja")
     ninja_build_args_file = os.path.join(build_dir, "build-args.ninja")
@@ -1208,7 +1214,13 @@ def generate(**kwargs):
     writer.variable("builddir", build_dir)
 
     # create rule for automatically re-running laze if necessary
-    write_ninja_build_args_file(ninja_build_args_file, ninja_build_file, ninja_build_file_deps, args_file, build_dir)
+    write_ninja_build_args_file(
+        ninja_build_args_file,
+        ninja_build_file,
+        ninja_build_file_deps,
+        args_file,
+        build_dir,
+    )
 
     before = time.time()
     # PARSING PHASE

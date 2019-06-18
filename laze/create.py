@@ -7,6 +7,7 @@ from .util import uniquify, split
 
 import laze.constants as const
 
+
 @click.command()
 @click.option(
     "_type", "--type", type=click.Choice(["app", "module", "subdir"]), default="app"

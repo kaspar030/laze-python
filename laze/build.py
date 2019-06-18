@@ -11,9 +11,15 @@ import yaml
 import click
 
 from laze.util import uniquify, load_dict, listify, split
-from laze.common import determine_dirs, rel_start_dir, dump_args, write_ninja_build_args_file
+from laze.common import (
+    determine_dirs,
+    rel_start_dir,
+    dump_args,
+    write_ninja_build_args_file,
+)
 from laze.deepcopy import deepcopy
 import laze.mtimelog
+
 
 @click.command()
 @click.option("--project-file", "-f", type=click.STRING, envvar="LAZE_PROJECT_FILE")
@@ -21,31 +27,50 @@ import laze.mtimelog
 @click.option(
     "--build-dir", "-B", type=click.STRING, default="build", envvar="LAZE_BUILDDIR"
 )
-@click.option("--builders", "-b", type=click.STRING, envvar="LAZE_BUILDERS", multiple=True)
+@click.option(
+    "--builders", "-b", type=click.STRING, envvar="LAZE_BUILDERS", multiple=True
+)
 @click.option("--tool", "-t", type=click.STRING, envvar="LAZE_TOOL")
-@click.option("--no-update", "-n", type=click.BOOL, is_flag=True, envvar="LAZE_NO_UPDATE")
-@click.option("--global/--local", "-g/-l", "_global", default=False, envvar="LAZE_GLOBAL")
+@click.option(
+    "--no-update", "-n", type=click.BOOL, is_flag=True, envvar="LAZE_NO_UPDATE"
+)
+@click.option(
+    "--global/--local", "-g/-l", "_global", default=False, envvar="LAZE_GLOBAL"
+)
 @click.option("--verbose", "-v", type=click.BOOL, is_flag=True, envvar="LAZE_VERBOSE")
-
 @click.option("--clean", "-c", type=click.BOOL, is_flag=True, envvar="LAZE_CLEAN")
 @click.option("--jobs", "-j", type=click.INT, envvar="LAZE_JOBS")
 @click.option("--keep-going", "-k", type=click.INT, default=1, envvar="LAZE_JOBS")
 @click.option("--dump-data", "-d", is_flag=True, default=False, envvar="LAZE_DUMP_DATA")
 @click.argument("targets", nargs=-1)
-def build(project_file, project_root, build_dir, tool, targets, builders, no_update, _global, verbose, clean, jobs, keep_going, dump_data):
+def build(
+    project_file,
+    project_root,
+    build_dir,
+    tool,
+    targets,
+    builders,
+    no_update,
+    _global,
+    verbose,
+    clean,
+    jobs,
+    keep_going,
+    dump_data,
+):
 
     targets = split(targets)
     builders = split(builders)
 
     generate_args = {
-            "project_file": project_file,
-            "project_root": project_root,
-            "build_dir": build_dir,
-            "builders": builders,
-            "_global": _global,
-            "apps": targets,
-            "dump_data": dump_data,
-            }
+        "project_file": project_file,
+        "project_root": project_root,
+        "build_dir": build_dir,
+        "builders": builders,
+        "_global": _global,
+        "apps": targets,
+        "dump_data": dump_data,
+    }
 
     start_dir, build_dir, project_root, project_file = determine_dirs(generate_args)
 
@@ -63,7 +88,10 @@ def build(project_file, project_root, build_dir, tool, targets, builders, no_upd
         target_set = set(targets)
 
     try:
-        if laze.mtimelog.read_log(os.path.join(build_dir, "laze-files.mp"), True) == False:
+        if (
+            laze.mtimelog.read_log(os.path.join(build_dir, "laze-files.mp"), True)
+            == False
+        ):
             print("laze: buildfiles changed")
             laze_args = None
         else:
@@ -84,10 +112,18 @@ def build(project_file, project_root, build_dir, tool, targets, builders, no_upd
         ninja_build_args_file = os.path.join(build_dir, "build-args.ninja")
         ninja_build_file_deps = ninja_build_file + ".d"
         if not os.path.isfile(ninja_build_args_file):
-            write_ninja_build_args_file(ninja_build_args_file, ninja_build_file, ninja_build_file_deps, laze_args_file, build_dir)
+            write_ninja_build_args_file(
+                ninja_build_args_file,
+                ninja_build_file,
+                ninja_build_file_deps,
+                laze_args_file,
+                build_dir,
+            )
 
         try:
-            subprocess.check_call(["ninja", "-f", ninja_build_args_file, "relaze"], cwd=project_root)
+            subprocess.check_call(
+                ["ninja", "-f", ninja_build_args_file, "relaze"], cwd=project_root
+            )
         except subprocess.CalledProcessError:
             print("laze: re-generation of build files failed.")
             sys.exit(1)
@@ -108,12 +144,15 @@ def build(project_file, project_root, build_dir, tool, targets, builders, no_upd
     else:
         _rel_start_dir = rel_start_dir(start_dir, project_root)
 
-        print("laze: local mode in \"%s\"" % _rel_start_dir)
+        print('laze: local mode in "%s"' % _rel_start_dir)
 
         try:
             laze_local = load_dict((build_dir, "laze-app-per-folder"))[_rel_start_dir]
         except KeyError:
-            print("laze: no targets defined in \"%s\" that match %s" % (_rel_start_dir, targets or "all"))
+            print(
+                'laze: no targets defined in "%s" that match %s'
+                % (_rel_start_dir, targets or "all")
+            )
             sys.exit(1)
 
         ninja_targets = []
@@ -149,10 +188,12 @@ def build(project_file, project_root, build_dir, tool, targets, builders, no_upd
             target_tools = tools.get(ninja_target, {})
             app, builder = app_target_map[ninja_target]
 
-
             tool_obj = target_tools.get(tool)
             if not tool_obj:
-                print("laze: target %s builder %s doesn't support tool %s" % (ninja_target, builder, tool))
+                print(
+                    "laze: target %s builder %s doesn't support tool %s"
+                    % (ninja_target, builder, tool)
+                )
                 sys.exit(1)
 
             app_builder_tool_target_list.append((app, builder, ninja_target, tool_obj))
@@ -170,7 +211,10 @@ def build(project_file, project_root, build_dir, tool, targets, builders, no_upd
         ninja_extra_args += ["-k", str(keep_going)]
 
     try:
-        subprocess.check_call(["ninja", "-f", ninja_build_file] + ninja_extra_args + ninja_targets, cwd=project_root)
+        subprocess.check_call(
+            ["ninja", "-f", ninja_build_file] + ninja_extra_args + ninja_targets,
+            cwd=project_root,
+        )
     except subprocess.CalledProcessError:
         sys.exit(1)
 
@@ -179,5 +223,8 @@ def build(project_file, project_root, build_dir, tool, targets, builders, no_upd
             try:
                 subprocess.check_call(cmd, shell=True, cwd=project_root)
             except subprocess.CalledProcessError:
-                print("laze: error executing \"%s\" (tool=%s, target=%s, builder=%s)" % (cmd, tool, target, builder))
+                print(
+                    'laze: error executing "%s" (tool=%s, target=%s, builder=%s)'
+                    % (cmd, tool, target, builder)
+                )
                 sys.exit(1)
