@@ -1,23 +1,19 @@
 #!/usr/bin/env python3
 
-import copy
 import os
-import re
 import subprocess
 import sys
-import time
-import yaml
 
 import click
 
-from laze.util import uniquify, load_dict, listify, split
+from laze.util import load_dict, split
 from laze.common import (
     determine_dirs,
     rel_start_dir,
     dump_args,
     write_ninja_build_args_file,
 )
-from laze.deepcopy import deepcopy
+
 import laze.mtimelog
 
 
@@ -100,11 +96,11 @@ def build(
             if laze_args != generate_args:
                 laze_args = None
 
-    except FileNotFoundError as e:
+    except FileNotFoundError:
         print("laze-args not found or laze build file removed")
         laze_args = None
 
-    if laze_args == None:
+    if laze_args is None:
         print("laze: (re-)generating ninja build files")
         laze_args_file = dump_args(build_dir, generate_args)
 
@@ -159,10 +155,10 @@ def build(
         for app, builder_target in laze_local.items():
             for builder, target in builder_target.items():
                 if builders:
-                    if not builder in builder_set:
+                    if builder not in builder_set:
                         continue
                 if targets:
-                    if not app in targets:
+                    if app not in targets:
                         continue
                 print("laze: building %s for %s" % (app, builder))
                 ninja_targets.append(target)
@@ -218,7 +214,7 @@ def build(
     except subprocess.CalledProcessError:
         sys.exit(1)
 
-    for app, builder, ninja_target, tool in app_builder_tool_target_list:
+    for _, builder, _, tool in app_builder_tool_target_list:
         for cmd in tool["cmd"]:
             try:
                 subprocess.check_call(cmd, shell=True, cwd=project_root)
