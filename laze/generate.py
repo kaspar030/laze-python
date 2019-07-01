@@ -313,6 +313,7 @@ class Declaration(object):
 
 
 class Context(Declaration):
+    yaml_name = "context"
     map = {}
 
     def __init__(self, add_to_map=True, **kwargs):
@@ -487,10 +488,12 @@ class Context(Declaration):
 
 
 class Builder(Context):
+    yaml_name = "builder"
     pass
 
 
 class Rule(Declaration):
+    yaml_name = "rule"
     rule_var_re = re.compile(r"\${\w+}")
     rule_num = 0
     rule_cached = 0
@@ -599,6 +602,7 @@ transtab = str.maketrans(_in, _out)
 
 
 class Module(Declaration):
+    yaml_name = "module"
     class NotAvailable(Exception):
         def __init__(self, context, module, dependency):
             self.context = context
@@ -889,6 +893,7 @@ rec_dd = lambda: defaultdict(rec_dd)
 
 
 class App(Module):
+    yaml_name = "app"
     count = 0
     list = []
     global_applist = set()
@@ -1139,13 +1144,7 @@ class App(Module):
             App.global_app_per_folder[self.relpath][self.name][builder.name] = outfile
 
 
-class_map = {
-    "context": Context,
-    "builder": Builder,
-    "rule": Rule,
-    "module": Module,
-    "app": App,
-}
+classes = [Context, Builder, Rule, Module, App, ]
 
 
 @click.command()
@@ -1228,15 +1227,15 @@ def generate(**kwargs):
     for data in data_list:
         relpath = data.get("_relpath", "") or "."
         import_root = data.get("_import_root", "")
-        for name, _class in class_map.items():
+        for _class in classes:
             if (
                 (_global is not True)
-                and (name == "app")
+                and (_class.yaml_name == "app")
                 and (relpath != _rel_start_dir)
             ):
                 continue
 
-            datas = listify(data.get(name, []))
+            datas = listify(data.get(_class.yaml_name, []))
             for _data in datas:
                 _data["_relpath"] = relpath
                 _data["_builddir"] = build_dir
@@ -1246,7 +1245,7 @@ def generate(**kwargs):
     no_post_parse_classes = {Builder}
 
     # POST_PARSING PHASE
-    for name, _class in class_map.items():
+    for _class in classes:
         if _class in no_post_parse_classes:
             continue
         _class.post_parse()
