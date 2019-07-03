@@ -8,13 +8,11 @@ import yaml
 
 # try to use libyaml (faster C-based yaml lib),
 # fallback to pure python version
-from yaml import load, dump
-
 try:
     from yaml import CLoader as Loader, CDumper as Dumper
 except ImportError:
     print("laze: warning: using slow python-based yaml loader")
-    from yaml import Loader, Dumper
+    from yaml import SafeLoader as Loader, Dumper
 
 from .deepcopy import deepcopy
 from collections import defaultdict
@@ -1167,7 +1165,7 @@ def generate(**kwargs):
     args_file = kwargs.get("args_file")
     if args_file:
         # TODO: allow overriding via command line?
-        args = yaml.load(open(args_file, "r"))
+        args = yaml.load(open(args_file, "r"), Loader=Loader)
     else:
         kwargs["apps"] = split(kwargs.get("apps"))
         kwargs["builders"] = split(kwargs.get("builders"))
