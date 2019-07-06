@@ -90,6 +90,7 @@ def deep_substitute(_vars, _dict):
     if value is a list, substitute each list member.
     """
 
+    _dict = flatten_vars(_dict)
     for k, v in _vars.items():
         if type(v) == list:
             for n, entry in enumerate(v):
@@ -110,6 +111,7 @@ def deep_safe_substitute(_vars, _dict):
     if value is a list, substitute each list member.
     """
 
+    _dict = flatten_vars(_dict)
     for k, v in _vars.items():
         if type(v) == list:
             for n, entry in enumerate(v):
@@ -122,6 +124,13 @@ def deep_safe_substitute(_vars, _dict):
                 _vars[k] = Template(v).safe_substitute(_dict)
 
     return _vars
+
+
+def finalize_vars(_vars, safe=False):
+    if not safe:
+        return flatten_vars(deep_substitute(_vars, _vars))
+    else:
+        return flatten_vars(deep_safe_substitute(_vars, _vars))
 
 
 def merge(
@@ -179,11 +188,17 @@ def merge(
 
 
 def flatten_var(var):
+    if type(var) == str:
+        return var
+    if len(var) == 1:
+        if type(var[0]) == str:
+            return var[0]
+
     removes = set()
-    var_list = listify(var)
     prefixes = []
     suffixes = []
-    for entry in var_list:
+
+    for entry in var:
         if isinstance(entry, dict):
             remove_list = entry.get("remove")
             if remove_list:
@@ -203,8 +218,8 @@ def flatten_var(var):
     return " ".join(
         [
             x
-            for x in chain(prefixes, var_list, suffixes)
-            if not (isinstance(x, dict) or x in removes)
+            for x in chain(prefixes, var, suffixes)
+            if not (isinstance(x, dict) or (len(x) == 0) or x in removes)
         ]
     )
 
