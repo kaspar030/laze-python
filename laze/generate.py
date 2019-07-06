@@ -5,6 +5,7 @@ import re
 import sys
 import time
 import yaml
+from multiprocessing import Pool
 
 # try to use libyaml (faster C-based yaml lib),
 # fallback to pure python version
@@ -886,6 +887,17 @@ class Module(Declaration):
 rec_dd = lambda: defaultdict(rec_dd)
 
 
+def per_builder(args):
+    builder, app_builderdict_list = args
+    result = []
+    for app, builder_dict in app_builderdict_list:
+        #print(f"building {app.name} for {builder.name}a")
+        builder_dict = app.build(builder, builder_dict)
+        result.append((builder.name, app.name, builder_dict))
+
+    return result
+
+
 class App(Module):
     yaml_name = "app"
     count = 0
@@ -912,23 +924,19 @@ class App(Module):
         self.blacklist = _list(self, "blacklist") | App.global_blacklist
         self.tools = self.args.get("tools", {})
 
-    def post_parse():
-        for app in App.list:
-            app.build()
-
-    def build(self):
-        if App.global_applist and not self.name in App.global_applist:
+    def check_build(self):
+        if App.global_applist and self.name not in App.global_applist:
             return
 
         appdict = App.global_apps_data[self.name] = {}
-        for name, builder in Context.map.items():
+        for _, builder in Context.map.items():
             if builder.__class__ != Builder:
                 continue
 
             builderdict = appdict[builder.name] = {}
             if not (
-                builder.listed(self.whitelist, empty_val=True)
-                and builder.listed(App.global_whitelist, empty_val=True)
+                    builder.listed(self.whitelist, empty_val=True)
+                    and builder.listed(App.global_whitelist, empty_val=True)
             ):
                 builderdict["notbuilt_reason"] = "not whitelisted"
                 continue
@@ -937,205 +945,229 @@ class App(Module):
                 builderdict["notbuilt_reason"] = "blacklisted"
                 continue
 
-            #
-            context = Context(
-                add_to_map=False,
-                name=self.name,
-                parent=builder,
-                vars={"builder": name},
-                tools=self.tools,
-                _relpath=self.relpath,
-                _builddir=self.args.get("_builddir"),
-            )
+            yield builder, builderdict
 
-            #
-            context.bindir = self.bindir
-            if "$" in context.bindir:
-                context.bindir = Template(context.bindir).substitute(
-                    {
-                        "parent": builder.get_bindir(),
-                        "name": self.name,
-                        "app": self.name,
-                        "builder": name,
-                    }
-                )
-            if context.bindir.startswith("./"):
-                context.bindir = os.path.join(self.relpath, context.bindir[2:])
+    @staticmethod
+    def post_parse():
+        builder_app_map = defaultdict(lambda: [])
+        for app in App.list:
+            for builder, builderdict in app.check_build():
+                builder_app_map[builder].append((app, builderdict))
 
-            context_vars = context.get_vars()
+        # default to single-threaded for now
+        if True or len(builder_app_map.keys()) == 1:
+            print("laze: single-threaded mode")
+            for entry in builder_app_map.items():
+                per_builder(entry)
 
-            print("laze:  building", self.name, "for", name)
+        else:
+            print("laze: multi-threaded mode")
+            with Pool() as pool:
+                for res in pool.imap(per_builder, builder_app_map.items()):
+                    pass
 
-            try:
-                modules = self.get_deps(context)
-            except Module.NotAvailable as e:
-                print(
-                    "laze: WARNING: skipping app",
-                    self.name,
-                    "for builder %s:" % context.parent.name,
-                    e,
-                )
-                builderdict["notbuilt_reason"] = {
-                    "dependency missing": {"module": e.module, "missing": e.dependency}
+    def build(self, builder, builderdict):
+        builder_name = builder.name
+
+        #
+        context = Context(
+            add_to_map=False,
+            name=self.name,
+            parent=builder,
+            vars={"builder": builder_name},
+            tools=self.tools,
+            _relpath=self.relpath,
+            _builddir=self.args.get("_builddir"),
+        )
+
+        #
+        context.bindir = self.bindir
+        if "$" in context.bindir:
+            context.bindir = Template(context.bindir).substitute(
+                {
+                    "parent": builder.get_bindir(),
+                    "name": self.name,
+                    "app": self.name,
+                    "builder": builder_name,
                 }
-                continue
+            )
+        if context.bindir.startswith("./"):
+            context.bindir = os.path.join(self.relpath, context.bindir[2:])
 
-            App.count += 1
+        context_vars = context.get_vars()
 
-            module_set = set()
+        print("laze:  building", self.name, "for", builder_name)
 
-            modules_dict = builderdict["modules"] = {}
-            for module in modules:
-                module_set.add(module.name)
-                module_global_vars = module.args.get("global_vars", {})
-                module_global_vars = module.vars_substitute(module_global_vars, context)
-                if module_global_vars:
-                    merge(context_vars, module_global_vars, join_lists=True)
+        try:
+            modules = self.get_deps(context)
+        except Module.NotAvailable as e:
+            print(
+                "laze: WARNING: skipping app",
+                self.name,
+                "for builder %s:" % context.parent.name,
+                e,
+            )
+            builderdict["notbuilt_reason"] = {
+                "dependency missing": {"module": e.module, "missing": e.dependency}
+            }
+            return
 
-                _sources = module.args.get("sources")
-                _deps = module.args.get("depends")
-                _uses = module.args.get("uses")
+        App.count += 1
 
-                module_dict = modules_dict[module.name] = {}
-                module_dict["context"] = module.context.name
+        module_set = set()
 
-                if _sources:
-                    module_dict["sources"] = listify(_sources)
-                if _deps:
-                    module_dict["deps"] = _deps.copy()
-                if _uses:
-                    module_dict["uses"] = _uses.copy()
-                if module_global_vars:
-                    module_dict["global_vars"] = module_global_vars
+        modules_dict = builderdict["modules"] = {}
+        for module in modules:
+            module_set.add(module.name)
+            module_global_vars = module.args.get("global_vars", {})
+            module_global_vars = module.vars_substitute(module_global_vars, context)
+            if module_global_vars:
+                merge(context_vars, module_global_vars, join_lists=True)
 
-            builderdict["context vars"] = context_vars
+            _sources = module.args.get("sources")
+            _deps = module.args.get("depends")
+            _uses = module.args.get("uses")
 
-            global writer
+            module_dict = modules_dict[module.name] = {}
+            module_dict["context"] = module.context.name
+
+            if _sources:
+                module_dict["sources"] = listify(_sources)
+            if _deps:
+                module_dict["deps"] = _deps.copy()
+            if _uses:
+                module_dict["uses"] = _uses.copy()
+            if module_global_vars:
+                module_dict["global_vars"] = module_global_vars
+
+        builderdict["context vars"] = context_vars
+
+        global writer
+        sources = []
+        objects = []
+        for module in modules:
+            module_dict = modules_dict[module.name]
+            _sources = listify(module.args.get("sources", []))
             sources = []
-            objects = []
-            for module in modules:
-                module_dict = modules_dict[module.name]
-                _sources = listify(module.args.get("sources", []))
-                sources = []
 
-                # handle optional sources ("- optional_module: file.c")
-                for source in _sources:
-                    if source is None:
-                        continue
-                    if type(source) == dict:
-                        for key, value in source.items():
-                            # splitting by comma enables multiple deps like "- a,b: file.c"
-                            key = set(key.split(","))
-                            if not key - module_set:
-                                _optional_sources = listify(value)
-                                module_dict.setdefault(
-                                    "optional sources used", []
-                                ).extend(_optional_sources)
-                                sources.extend(_optional_sources)
-                    else:
-                        sources.append(source)
+            # handle optional sources ("- optional_module: file.c")
+            for source in _sources:
+                if source is None:
+                    continue
+                if type(source) == dict:
+                    for key, value in source.items():
+                        # splitting by comma enables multiple deps like "- a,b: file.c"
+                        key = set(key.split(","))
+                        if not key - module_set:
+                            _optional_sources = listify(value)
+                            module_dict.setdefault(
+                                "optional sources used", []
+                            ).extend(_optional_sources)
+                            sources.extend(_optional_sources)
+                else:
+                    sources.append(source)
 
-                module_defines = module.get_defines(context, module_set)
+            module_defines = module.get_defines(context, module_set)
 
-                module_vars = module.get_vars(context)
+            module_vars = module.get_vars(context)
 
-                module_export_vars = module.get_export_vars(context, module_set)
-                if module_export_vars:
-                    module_export_vars = deepcopy(module_export_vars)
-                    merge(module_vars, module_export_vars)
-                    module_dict["export_vars"] = module_export_vars
+            module_export_vars = module.get_export_vars(context, module_set)
+            if module_export_vars:
+                module_export_vars = deepcopy(module_export_vars)
+                merge(module_vars, module_export_vars)
+                module_dict["export_vars"] = module_export_vars
 
-                # add "-DMODULE_<module_name> for each used/depended module
-                if module_defines:
-                    module_vars = deepcopy(module_vars)
-                    cflags = module_vars.setdefault("CFLAGS", [])
-                    cflags.extend(module_defines)
+            # add "-DMODULE_<module_name> for each used/depended module
+            if module_defines:
+                module_vars = deepcopy(module_vars)
+                cflags = module_vars.setdefault("CFLAGS", [])
+                cflags.extend(module_defines)
 
-                if module_vars:
-                    module_dict["vars"] = module_vars
+            if module_vars:
+                module_dict["vars"] = module_vars
 
-                module_used = module.get_used(context, module_set)
-                if module_used:
-                    module_dict["used"] = [x.name for x in module_used]
+            module_used = module.get_used(context, module_set)
+            if module_used:
+                module_dict["used"] = [x.name for x in module_used]
 
-                module_vars = context.process_var_options(module_vars)
-                module_vars_flattened = flatten_vars(
-                    deep_substitute(module_vars, module_vars)
+            module_vars = context.process_var_options(module_vars)
+            module_vars_flattened = finalize_vars(module_vars)
+
+            for source in sources:
+                source_in = module.locate_source(source)
+                rule = Rule.get_by_extension(source)
+
+                obj = context.get_filepath(
+                    os.path.join(module.relpath, source[:-2] + rule.args.get("out"))
                 )
-                for source in sources:
-                    source_in = module.locate_source(source)
-                    rule = Rule.get_by_extension(source)
+                obj = rule.to_ninja_build(
+                    writer, source_in, obj, module_vars_flattened
+                )
+                objects.append(obj)
+                # print ( source) # , module.get_vars(context), rule.name)
 
-                    obj = context.get_filepath(
-                        os.path.join(module.relpath, source[:-2] + rule.args.get("out"))
-                    )
-                    obj = rule.to_ninja_build(
-                        writer, source_in, obj, module_vars_flattened
-                    )
-                    objects.append(obj)
-                    # print ( source) # , module.get_vars(context), rule.name)
+        link = Rule.get_by_name("LINK")
+        try:
+            outfile = context.get_filepath(self.args["outfile"])
+        except KeyError:
+            outfile = context.get_filepath(os.path.basename(self.name)) + ".elf"
 
-            link = Rule.get_by_name("LINK")
-            try:
-                outfile = context.get_filepath(self.args["outfile"])
-            except KeyError:
-                outfile = context.get_filepath(os.path.basename(self.name)) + ".elf"
+        builderdict["outfile"] = outfile
 
-            builderdict["outfile"] = outfile
+        link_vars = finalize_vars(context.process_var_options(context_vars))
 
-            context_vars = context.process_var_options(context_vars)
-            link_vars = flatten_vars(deep_substitute(context_vars, context_vars))
-            res = link.to_ninja_build(writer, objects, outfile, link_vars)
-            if res != outfile:
-                # An identical binary has been built for another Application.
-                # As the binary can be considered a final target, create a file
-                # symbolic link.
-                symlink = Rule.get_by_name("SYMLINK")
-                symlink.to_ninja_build(writer, res, outfile)
-                builderdict["outfile_real"] = res
+        res = link.to_ninja_build(writer, objects, outfile, link_vars)
+        if res != outfile:
+            # An identical binary has been built for another Application.
+            # As the binary can be considered a final target, create a file
+            # symbolic link.
+            symlink = Rule.get_by_name("SYMLINK")
+            symlink.to_ninja_build(writer, res, outfile)
+            builderdict["outfile_real"] = res
 
-            depends(context.parent.name, outfile)
-            depends(self.name, outfile)
-            depends("%s:%s" % (self.name, name), outfile)
+        depends(context.parent.name, outfile)
+        depends(self.name, outfile)
+        depends("%s:%s" % (self.name, builder_name), outfile)
 
-            module_vars["out"] = outfile
-            module_vars["relpath"] = self.relpath
+        module_vars["out"] = outfile
+        module_vars["relpath"] = self.relpath
 
-            # handle tools
-            tools = context.get_tools()
-            if tools:
-                module_vars_flattened = flatten_vars(module_vars)
+        # handle tools
+        tools = context.get_tools()
+        if tools:
+            module_vars_flattened = finalize_vars(module_vars)
 
-                tools_dict = builderdict["tools"] = {}
-                for tool_name, spec in tools.items():
-                    # dprint(
-                    #    "verbose",
-                    #    "laze: app %s supports tool %s" % (self.name, tool_name),
-                    # )
-                    if type(spec) == str:
-                        cmd = [str]
-                        spec = {}
-                    elif type(spec) == list:
-                        cmd = spec
-                        spec = {}
-                    elif type(spec) == dict:
-                        cmd = spec["cmd"]
-                    else:
-                        print("laze: error: app %s tool %s has invalid format.")
-                        sys.exit(1)
+            tools_dict = builderdict["tools"] = {}
+            for tool_name, spec in tools.items():
+                # dprint(
+                #    "verbose",
+                #    "laze: app %s supports tool %s" % (self.name, tool_name),
+                # )
+                if type(spec) == str:
+                    cmd = [str]
+                    spec = {}
+                elif type(spec) == list:
+                    cmd = spec
+                    spec = {}
+                elif type(spec) == dict:
+                    cmd = spec["cmd"]
+                else:
+                    print("laze: error: app %s tool %s has invalid format.")
+                    sys.exit(1)
 
-                    # substitute variables
-                    cmd = [
-                        Template(command).substitute(module_vars_flattened)
-                        for command in cmd
-                    ]
-                    spec["cmd"] = cmd
-                    # spec["target"] = outfile
+                # substitute variables
+                cmd = [
+                    Template(command).substitute(module_vars_flattened)
+                    for command in cmd
+                ]
+                spec["cmd"] = cmd
+                # spec["target"] = outfile
 
-                    App.global_tools[outfile][tool_name] = spec
-                    tools_dict[tool_name] = spec
+                App.global_tools[outfile][tool_name] = spec
+                tools_dict[tool_name] = spec
 
-            App.global_app_per_folder[self.relpath][self.name][builder.name] = outfile
+        App.global_app_per_folder[self.relpath][self.name][builder.name] = outfile
+        return builderdict
 
 
 classes = [Context, Builder, Rule, Module, App, ]
@@ -1238,6 +1270,7 @@ def generate(**kwargs):
 
     no_post_parse_classes = {Builder}
 
+    before = time.time()
     # POST_PARSING PHASE
     for _class in classes:
         if _class in no_post_parse_classes:
