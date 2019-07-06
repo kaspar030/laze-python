@@ -25,15 +25,12 @@ import click
 from .util import (
     merge,
     listify,
-    default_to_regular,
     dict_list_product,
     dump_dict,
     uniquify,
     deep_replace,
-    deep_substitute,
     deep_safe_substitute,
-    flatten_var,
-    flatten_vars,
+    finalize_vars,
     static_vars,
     split,
 )
@@ -420,7 +417,6 @@ class Context(Declaration):
         return self.var_options
 
     def get_module(self, module_name):
-        #        print("get_module()", s, s.modules.keys())
         if module_name in self.disabled_modules:
             print("DISABLED_MODULE", self.name, module_name)
             return None
