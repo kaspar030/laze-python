@@ -546,7 +546,7 @@ class Rule(Declaration):
             depfile=self.depfile,
         )
 
-    def to_ninja_build(self, writer, _in, _out, _vars=None):
+    def to_ninja_build(self, writer, _in, _out, _vars=None, deps=None):
         _vars = _vars or {}
         # print("RULE", self.name, _in, _out, _vars)
 
@@ -568,7 +568,7 @@ class Rule(Declaration):
         except KeyError:
             Rule.rule_cache[cache_key] = _out
             # print("laze: NOCACHE: %s %s ->  %s" % (s.name, _in, _out), vars)
-            writer.build(outputs=_out, rule=self.name, inputs=_in, variables=vars)
+            writer.build(outputs=_out, rule=self.name, inputs=_in, variables=vars, implicit=deps)
             return _out
 
 
@@ -680,6 +680,7 @@ class Module(Declaration):
         self.depends_cache = {}
         self.uses_cache = {}
         self.used_deps_cache = {}
+        self.build_deps = []
 
     @staticmethod
     def post_parse():
@@ -706,13 +707,39 @@ class Module(Declaration):
             # handle possibly passed subdir parameter
             if type(download) == dict:
                 subdir = download.get("subdir")
-                if subdir:
-                    dldir = os.path.join(dldir, subdir)
+                url = download["git"]["url"]
+                commit = download["git"].get("commit", "master")
+            else:
+                subdir = None
+                url = download
+                commit = "master"
+            dldir = os.path.join(dldir, commit)
 
+            dl_rule = Rule.get_by_name("GIT_DOWNLOAD")
+            res = dl_rule.to_ninja_build(writer, [], os.path.join(dldir, ".download"),
+                                         {"URL": url, "COMMIT": commit})
+
+            self.build_deps.append(res)
             # make "locate_source()" return filenames in downloaded folder/[subdir/]
-            self.override_source_location = dldir
+            dldir = os.path.dirname(res)
+            if subdir:
+                srcdir = os.path.join(dldir, subdir)
+            else:
+                srcdir = dldir
 
-            dl.add_to_queue(download, dldir)
+            self.override_source_location = srcdir
+
+            # make all source files depend on .download
+            sources = []
+            for source in listify(self.args.get("sources", [])):
+                if type(source) == dict:
+                    for _optional in source.values():
+                        sources.extend(listify(_optional))
+                else:
+                    sources.append(source)
+
+            for source in sources:
+                depends(self.locate_source(source), res)
 
     def get_deps(self, context, resolved=None, unresolved=None, optional=None):
         if resolved is None:
@@ -896,9 +923,8 @@ def per_builder(args):
     builder, app_builderdict_list = args
     result = []
     for app, builder_dict in app_builderdict_list:
-        #print(f"building {app.name} for {builder.name}a")
         build_res_tuple = app.build(builder, builder_dict)
-        result.append((builder.name, app.name, build_res_tuple))
+        result.append(build_res_tuple)
 
     return result
 
@@ -956,13 +982,14 @@ class App(Module):
     def post_parse():
         global writer
 
-        def finalize_build(builder_name, build_res_tuple):
+        def finalize_build(build_res_tuple):
             builderdict, object_targets, link_target, _depends, app_per_folder, _tools \
                 = build_res_tuple
 
             link_objects = []
-            for rule, obj, source_in, vars in object_targets:
-                link_objects.append(rule.to_ninja_build(writer, source_in, obj, vars))
+            for rule, obj, source_in, vars, build_deps in object_targets:
+                _obj = rule.to_ninja_build(writer, source_in, obj, vars, build_deps)
+                link_objects.append(_obj)
 
             link, outfile, link_vars = link_target
             res = link.to_ninja_build(writer, link_objects, outfile, link_vars)
@@ -997,11 +1024,10 @@ class App(Module):
             _map = Pool().map
 
         for res_list in _map(per_builder, builder_app_map.items()):
-            for res in res_list:
-                builder_name, app_name, build_res_tuple = res
+            for build_res_tuple in res_list:
                 if build_res_tuple is None:
                     continue
-                finalize_build(builder_name, build_res_tuple)
+                finalize_build(build_res_tuple)
 
     def build(self, builder, builderdict):
         _depends = {}
@@ -1057,6 +1083,7 @@ class App(Module):
         module_set = set()
 
         modules_dict = builderdict["modules"] = {}
+        build_deps = builderdict["build dependencies"] = []
         for module in modules:
             module_set.add(module.name)
             module_global_vars = module.args.get("global_vars", {})
@@ -1079,6 +1106,14 @@ class App(Module):
                 module_dict["uses"] = _uses.copy()
             if module_global_vars:
                 module_dict["global_vars"] = module_global_vars
+
+            build_deps.extend(module.build_deps)
+
+        if build_deps:
+            build_dep_name = "%s:%s:build_deps" % (self.name, builder_name)
+            depends(build_dep_name, build_deps)
+        else:
+            build_dep_name = None
 
         builderdict["context vars"] = context_vars
 
@@ -1139,7 +1174,7 @@ class App(Module):
                 obj = context.get_filepath(
                     os.path.join(module.relpath, source[:-2] + rule.args.get("out"))
                 )
-                objects.append((rule, obj, source_in, module_vars_flattened))
+                objects.append((rule, obj, source_in, module_vars_flattened, build_deps))
 
         link_rule = Rule.get_by_name("LINK")
         try:
