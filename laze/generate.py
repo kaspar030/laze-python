@@ -709,10 +709,13 @@ class Module(Declaration):
                 subdir = download.get("subdir")
                 url = download["git"]["url"]
                 commit = download["git"].get("commit", "master")
+                patches = download.get("patches", None)
             else:
                 subdir = None
                 url = download
                 commit = "master"
+                patches = None
+
             dldir = os.path.join(dldir, commit)
 
             dl_rule = Rule.get_by_name("GIT_DOWNLOAD")
@@ -737,6 +740,12 @@ class Module(Declaration):
                         sources.extend(listify(_optional))
                 else:
                     sources.append(source)
+
+            if patches:
+                patches[:] = [os.path.join(os.path.abspath(self.relpath), patch) for patch in patches]
+                patch_rule = Rule.get_by_name("PATCH")
+                res = patch_rule.to_ninja_build(writer, patches, os.path.join(dldir, ".patched"), None, res)
+                self.build_deps.append(res)
 
             for source in sources:
                 depends(self.locate_source(source), res)
