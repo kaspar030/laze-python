@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import traceback
+import collections
 
 # try to use libyaml (faster C-based yaml lib),
 # fallback to pure python version
@@ -289,3 +290,12 @@ def load_dict(path):
     path = path + ".yml"
 
     return yaml.load(open(path), Loader=Loader)
+
+
+def deep_update(d, u):
+    for k, v in u.items():
+        if isinstance(v, collections.Mapping):
+            d[k] = deep_update(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d

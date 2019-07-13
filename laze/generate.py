@@ -24,16 +24,17 @@ from string import Template
 import click
 
 from .util import (
-    merge,
-    listify,
-    dict_list_product,
-    dump_dict,
-    uniquify,
     deep_replace,
     deep_safe_substitute,
+    deep_update,
+    dict_list_product,
+    dump_dict,
     finalize_vars,
-    static_vars,
+    listify,
+    merge,
     split,
+    static_vars,
+    uniquify,
 )
 
 from ninja_syntax import Writer
@@ -573,7 +574,10 @@ class Rule(Declaration):
 
 @static_vars(map={})
 def depends(name, deps=None):
-    depends.map.setdefault(name, set()).update(listify(deps))
+    if type(deps) == set:
+        depends.map.setdefault(name, set()).update(deps)
+    else:
+        depends.map.setdefault(name, set()).update(listify(deps))
 
 
 def list_remove(_list):
@@ -677,6 +681,7 @@ class Module(Declaration):
         self.uses_cache = {}
         self.used_deps_cache = {}
 
+    @staticmethod
     def post_parse():
         for module in Module.list:
             context_name = module.args.get("context", "default")
@@ -892,8 +897,8 @@ def per_builder(args):
     result = []
     for app, builder_dict in app_builderdict_list:
         #print(f"building {app.name} for {builder.name}a")
-        builder_dict = app.build(builder, builder_dict)
-        result.append((builder.name, app.name, builder_dict))
+        build_res_tuple = app.build(builder, builder_dict)
+        result.append((builder.name, app.name, build_res_tuple))
 
     return result
 
@@ -949,24 +954,61 @@ class App(Module):
 
     @staticmethod
     def post_parse():
+        global writer
+
+        def finalize_build(builder_name, build_res_tuple):
+            builderdict, object_targets, link_target, _depends, app_per_folder, _tools \
+                = build_res_tuple
+
+            link_objects = []
+            for rule, obj, source_in, vars in object_targets:
+                link_objects.append(rule.to_ninja_build(writer, source_in, obj, vars))
+
+            link, outfile, link_vars = link_target
+            res = link.to_ninja_build(writer, link_objects, outfile, link_vars)
+            if res != outfile:
+                # An identical binary has been built for another Application.
+                # As the binary can be considered a final target, create a file
+                # symbolic link.
+                symlink = Rule.get_by_name("SYMLINK")
+                symlink.to_ninja_build(writer, res, outfile)
+                builderdict["outfile_real"] = res
+
+            for k, v in _depends.items():
+                depends(k, v)
+
+            deep_update(App.global_app_per_folder, app_per_folder)
+            deep_update(App.global_tools, _tools)
+            App.count += 1
+
+        nbuilds = 0
         builder_app_map = defaultdict(lambda: [])
         for app in App.list:
             for builder, builderdict in app.check_build():
+                nbuilds += 1
                 builder_app_map[builder].append((app, builderdict))
 
-        # default to single-threaded for now
-        if True or len(builder_app_map.keys()) == 1:
+        if nbuilds < 10:
             print("laze: single-threaded mode")
-            for entry in builder_app_map.items():
-                per_builder(entry)
+            _map = map
 
         else:
             print("laze: multi-threaded mode")
-            with Pool() as pool:
-                for res in pool.imap(per_builder, builder_app_map.items()):
-                    pass
+            _map = Pool().map
+
+        for res_list in _map(per_builder, builder_app_map.items()):
+            for res in res_list:
+                builder_name, app_name, build_res_tuple = res
+                if build_res_tuple is None:
+                    continue
+                finalize_build(builder_name, build_res_tuple)
 
     def build(self, builder, builderdict):
+        _depends = {}
+
+        def depends(name, deps=None):
+            _depends.setdefault(name, set()).update(listify(deps))
+
         builder_name = builder.name
 
         #
@@ -996,7 +1038,7 @@ class App(Module):
 
         context_vars = context.get_vars()
 
-        print("laze:  building", self.name, "for", builder_name)
+        print("laze:  configuring", self.name, "for", builder_name)
 
         try:
             modules = self.get_deps(context)
@@ -1011,8 +1053,6 @@ class App(Module):
                 "dependency missing": {"module": e.module, "missing": e.dependency}
             }
             return
-
-        App.count += 1
 
         module_set = set()
 
@@ -1042,7 +1082,6 @@ class App(Module):
 
         builderdict["context vars"] = context_vars
 
-        global writer
         sources = []
         objects = []
         for module in modules:
@@ -1100,31 +1139,20 @@ class App(Module):
                 obj = context.get_filepath(
                     os.path.join(module.relpath, source[:-2] + rule.args.get("out"))
                 )
-                obj = rule.to_ninja_build(
-                    writer, source_in, obj, module_vars_flattened
-                )
-                objects.append(obj)
-                # print ( source) # , module.get_vars(context), rule.name)
+                objects.append((rule, obj, source_in, module_vars_flattened))
 
-        link = Rule.get_by_name("LINK")
+        link_rule = Rule.get_by_name("LINK")
         try:
             outfile = context.get_filepath(self.args["outfile"])
         except KeyError:
             outfile = context.get_filepath(os.path.basename(self.name)) + ".elf"
 
+        # link target
         builderdict["outfile"] = outfile
-
         link_vars = finalize_vars(context.process_var_options(context_vars))
+        link_target = (link_rule, outfile, link_vars)
 
-        res = link.to_ninja_build(writer, objects, outfile, link_vars)
-        if res != outfile:
-            # An identical binary has been built for another Application.
-            # As the binary can be considered a final target, create a file
-            # symbolic link.
-            symlink = Rule.get_by_name("SYMLINK")
-            symlink.to_ninja_build(writer, res, outfile)
-            builderdict["outfile_real"] = res
-
+        # misc dependencies
         depends(context.parent.name, outfile)
         depends(self.name, outfile)
         depends("%s:%s" % (self.name, builder_name), outfile)
@@ -1134,6 +1162,7 @@ class App(Module):
 
         # handle tools
         tools = context.get_tools()
+        _tools = {}
         if tools:
             module_vars_flattened = finalize_vars(module_vars)
 
@@ -1163,11 +1192,12 @@ class App(Module):
                 spec["cmd"] = cmd
                 # spec["target"] = outfile
 
-                App.global_tools[outfile][tool_name] = spec
+                _tools.update({outfile: {tool_name: spec}})
                 tools_dict[tool_name] = spec
 
-        App.global_app_per_folder[self.relpath][self.name][builder.name] = outfile
-        return builderdict
+        app_per_folder = {self.relpath: {self.name: {builder.name: outfile}}}
+
+        return builderdict, objects, link_target, _depends, app_per_folder, _tools
 
 
 classes = [Context, Builder, Rule, Module, App, ]
