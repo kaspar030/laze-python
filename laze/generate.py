@@ -872,7 +872,7 @@ class Module(Declaration):
         vars = self.args.get("vars", {})
         if vars:
             _vars = deepcopy(context.get_vars())
-            merge(_vars, vars, override=True)
+            merge(_vars, deepcopy(vars), override=True)
             _vars = self.vars_substitute(_vars, context)
             return _vars
         else:
@@ -890,6 +890,7 @@ class Module(Declaration):
             # print("get_export_vars", self.name, dep.name)
             dep_export_vars = dep.args.get("export_vars", {})
             if dep_export_vars:
+                dep_export_vars = deepcopy(dep_export_vars)
                 dep_export_vars = dep.vars_substitute(dep_export_vars, context)
                 merge(vars, dep_export_vars, join_lists=True)
 
@@ -1095,7 +1096,7 @@ class App(Module):
         build_deps = builderdict["build dependencies"] = []
         for module in modules:
             module_set.add(module.name)
-            module_global_vars = module.args.get("global_vars", {})
+            module_global_vars = deepcopy(module.args.get("global_vars", {}))
             module_global_vars = module.vars_substitute(module_global_vars, context)
             if module_global_vars:
                 merge(context_vars, module_global_vars, join_lists=True)
