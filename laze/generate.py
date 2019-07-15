@@ -897,11 +897,15 @@ class Module(Declaration):
         self.export_vars[context] = vars
         return vars
 
+    def get_bindir(self, context):
+        return context.get_filepath(self.relpath)
+
     def vars_substitute(self, _vars, context):
         _dict = {
             "relpath": self.relpath,
             "root": self.root,
             "srcdir": self.locate_source(""),
+            "bindir": self.get_bindir(context)
         }
 
         return deep_safe_substitute(_vars, _dict)
@@ -1154,6 +1158,9 @@ class App(Module):
             module_defines = module.get_defines(context, module_set)
 
             module_vars = module.get_vars(context)
+
+            module_vars["srcdir"] = module.locate_source()
+            module_vars["bindir"] = module.get_bindir(context)
 
             module_export_vars = module.get_export_vars(context, module_set)
             if module_export_vars:
