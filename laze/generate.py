@@ -682,6 +682,9 @@ class Module(Declaration):
         self.used_deps_cache = {}
         self.build_deps = []
 
+        self.custom_build_rule = None
+        self.handle_custom_build()
+
     @staticmethod
     def post_parse():
         for module in Module.list:
@@ -696,6 +699,18 @@ class Module(Declaration):
             context.modules[module.args.get("name")] = module
             # print("MODULE", module.name, "in", context)
             module.handle_download(module.args.get("download"))
+
+    def handle_custom_build(self):
+        custom_build = self.args.get("build")
+        if custom_build is not None:
+            self.custom_build_rule = Rule(
+                **{
+                    "name": "BUILD_%s" % self.name,
+                    "cmd": " && ".join(custom_build["cmd"]),
+                })
+            self.custom_build_out = custom_build.get("out")
+            self.custom_build_before_dependees = \
+                custom_build.get("build_before_dependees", False)
 
     def handle_download(self, download):
         if download:
@@ -1191,7 +1206,21 @@ class App(Module):
                 obj = context.get_filepath(
                     os.path.join(module.relpath, source[:-2] + rule.args.get("out"))
                 )
-                objects.append((rule, obj, source_in, module_vars_flattened, build_deps))
+                objects.append((rule, obj, source_in, module_vars_flattened, build_dep_name))
+
+            if module.custom_build_rule:
+                custom_out = context.get_filepath(
+                    os.path.join(module.relpath, module.custom_build_out)
+                )
+
+                if module.custom_build_before_dependees:
+                    depends(build_dep_name, custom_out)
+                    custom_deps = build_deps
+                else:
+                    custom_deps = build_dep_name
+
+                objects.append((module.custom_build_rule, custom_out, None,
+                                module_vars_flattened, custom_deps))
 
         link_rule = Rule.get_by_name("LINK")
         try:
