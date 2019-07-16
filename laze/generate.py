@@ -435,12 +435,12 @@ class Context(Declaration):
             _vars = {}
             pvars = self.parent.get_vars()
             merge(_vars, deepcopy(pvars), override=True, change_listorder=False)
-            own_vars = self.vars_substitute(self.args.get("vars", {}))
+            own_vars = self.vars_substitute(deepcopy(self.args.get("vars", {})))
             merge(_vars, own_vars, override=True, change_listorder=False)
 
             self.vars = _vars
         else:
-            self.vars = self.vars_substitute(self.args.get("vars", {}))
+            self.vars = self.vars_substitute(deepcopy(self.args.get("vars", {})))
 
         return self.vars
 
