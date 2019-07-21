@@ -1033,8 +1033,8 @@ class App(Module):
             for k, v in _depends.items():
                 depends(k, v)
 
-            deep_update(App.global_app_per_folder, app_per_folder)
-            deep_update(App.global_tools, _tools)
+            merge(App.global_app_per_folder, app_per_folder)
+            merge(App.global_tools, _tools)
             App.count += 1
 
         nbuilds = 0
@@ -1249,10 +1249,10 @@ class App(Module):
 
             tools_dict = builderdict["tools"] = {}
             for tool_name, spec in tools.items():
-                # dprint(
-                #    "verbose",
-                #    "laze: app %s supports tool %s" % (self.name, tool_name),
-                # )
+                #dprint(
+                #   "verbose",
+                #   "laze: app %s supports tool %s" % (self.name, tool_name),
+                #)
                 if type(spec) == str:
                     cmd = [str]
                     spec = {}
@@ -1273,7 +1273,7 @@ class App(Module):
                 spec["cmd"] = cmd
                 # spec["target"] = outfile
 
-                _tools.update({outfile: {tool_name: spec}})
+                deep_update(_tools, {outfile: {tool_name: spec}})
                 tools_dict[tool_name] = spec
 
         app_per_folder = {self.relpath: {self.name: {builder.name: outfile}}}
