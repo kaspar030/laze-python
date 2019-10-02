@@ -1071,7 +1071,7 @@ class App(Module):
             add_to_map=False,
             name=self.name,
             parent=builder,
-            vars={"builder": builder_name},
+            vars={"app": self.name, "builder": builder_name},
             tools=self.tools,
             _relpath=self.relpath,
             _builddir=self.args.get("_builddir"),
