@@ -643,25 +643,28 @@ class Module(Declaration):
         if sources:
             for source in sources:
                 if type(source) == dict:
-                    for key, value in source.items():
+                    for key, _ in source.items():
                         # splitting by comma enables multiple deps like "- a,b: file.c"
                         uses.extend(key.split(","))
 
-        # parse optional dependencies
-        # (if X is in module set, depend on Y)
+        # parse conditional dependencies
+        # optional: (if X is in module set, depend on Y)
+        # orthogonal: (if X is *not* in module set, depend on Y)
         self.depends_optional = {}
+        self.depends_orthogonal = {}
 
         for dep in depends:
             if type(dep) == dict:
                 for k, v in dep.items():
-                    v = listify(v)
-                    self.depends_optional.setdefault(k, set()).update(v)
-                    uses.extend(v)
+                    if k.startswith("!"):
+                        v = listify(v)
+                        self.depends_orthogonal.setdefault(k[1:], set()).update(v)
+                    else:
+                        v = listify(v)
+                        self.depends_optional.setdefault(k, set()).update(v)
+                        uses.extend(v)
 
         depends[:] = [x for x in depends if type(x) != dict]
-
-        if self.depends_optional:
-            print("OPTIONAL DEPENDENCIES:", self.name, self.depends_optional)
 
         # remove entries starting with "-"
         list_remove(uses)
@@ -685,6 +688,8 @@ class Module(Declaration):
         self.custom_build_rule = None
         self.handle_custom_build()
 
+        self.dldir = None
+
     @staticmethod
     def post_parse():
         for module in Module.list:
@@ -698,7 +703,12 @@ class Module(Declaration):
             module.context = context
             context.modules[module.args.get("name")] = module
             # print("MODULE", module.name, "in", context)
-            module.handle_download(module.args.get("download"))
+            last_prepare_dep = module.handle_download(module.args.get("download"))
+
+            last_prepare_dep = module.handle_prepare(last_prepare_dep)
+            if last_prepare_dep is not None:
+                module.make_sources_depend(last_prepare_dep)
+                module.build_deps.append(last_prepare_dep)
 
     def handle_custom_build(self):
         custom_build = self.args.get("build")
@@ -712,14 +722,52 @@ class Module(Declaration):
             self.custom_build_before_dependees = \
                 custom_build.get("build_before_dependees", False)
 
+    def handle_prepare(self, last_prepare_dep):
+        global writer
+        prepare_list = self.args.get("prepare")
+        if prepare_list is None:
+            return last_prepare_dep
+
+        prepare_list = listify(prepare_list)
+
+        if self.dldir is None:
+            print("laze: error: module %s has prepare steps but is not downloaded",
+                  self.name)
+            sys.exit(1)
+
+        for n, prepare in enumerate(prepare_list):
+            out = prepare.get("out", ".prepared%s" % n)
+            out = os.path.join(self.dldir, out)
+            rule = Rule(
+                **{
+                    "name": "PREPARE_%s_%s" % (self.name, n),
+                    "cmd": " && ".join(prepare["cmd"]),
+                })
+            vars = {"srcdir": self.dldir}
+            rule.to_ninja_build(writer, None, out, vars, last_prepare_dep)
+            last_prepare_dep = out
+
+        return last_prepare_dep
+
+    def make_sources_depend(self, dep):
+        if dep is None:
+            return
+
+        # make all source files depend on .download
+        for source in listify(self.args.get("sources", [])):
+            if type(source) == dict:
+                for _optional in source.values():
+                    for source in listify(_optional):
+                        depends(self.locate_source(source), dep)
+            else:
+                depends(self.locate_source(source), dep)
+
     def handle_download(self, download):
         if download:
             global global_build_dir
             # TODO: check if relpath is appropriate
             dldir = os.path.join(global_build_dir, "dl", self.relpath, self.name)
-            print("DOWNLOAD", self.name, download, dldir)
 
-            # handle possibly passed subdir parameter
             if type(download) == dict:
                 subdir = download.get("subdir")
                 url = download["git"]["url"]
@@ -737,7 +785,6 @@ class Module(Declaration):
             res = dl_rule.to_ninja_build(writer, [], os.path.join(dldir, ".download"),
                                          {"URL": url, "COMMIT": commit})
 
-            self.build_deps.append(res)
             # make "locate_source()" return filenames in downloaded folder/[subdir/]
             dldir = os.path.dirname(res)
             if subdir:
@@ -745,25 +792,18 @@ class Module(Declaration):
             else:
                 srcdir = dldir
 
-            self.override_source_location = srcdir
+            # used by prepare steps
+            self.dldir = srcdir
 
-            # make all source files depend on .download
-            sources = []
-            for source in listify(self.args.get("sources", [])):
-                if type(source) == dict:
-                    for _optional in source.values():
-                        sources.extend(listify(_optional))
-                else:
-                    sources.append(source)
+            self.override_source_location = srcdir
 
             if patches:
                 patches[:] = [os.path.join(os.path.abspath(self.relpath), patch) for patch in patches]
                 patch_rule = Rule.get_by_name("PATCH")
-                res = patch_rule.to_ninja_build(writer, patches, os.path.join(dldir, ".patched"), None, res)
-                self.build_deps.append(res)
+                patched = os.path.join(dldir, ".patched")
+                res = patch_rule.to_ninja_build(writer, patches, patched, None, res)
 
-            for source in sources:
-                depends(self.locate_source(source), res)
+            return res
 
     def get_deps(self, context, resolved=None, unresolved=None, optional=None):
         if resolved is None:
@@ -785,7 +825,13 @@ class Module(Declaration):
         if self.depends_optional:
             optional.add(self)
 
-        for dep_name in self.depends:
+        # handle if X is *not* available, depend on Y)
+        orthogonal = []
+        for k, v in self.depends_orthogonal.items():
+            if context.get_module(k) is None:
+                orthogonal.extend(v)
+
+        for dep_name in chain(self.depends, orthogonal):
             # (handle if X is in module_set, depend on Y)
             # if type(dep_name) == dict:
             #    # HANDLE
