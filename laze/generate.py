@@ -825,8 +825,11 @@ class Module(Declaration):
                     for k, v in dep.depends_optional.items():
                         if k in resolved_names:
                             for optdep in v:
-                                if not optdep in resolved_names:
-                                    unresolved.add(context.get_module(optdep))
+                                if optdep not in resolved_names:
+                                    _optdep = context.get_module(optdep)
+                                    if _optdep is None:
+                                        raise Module.NotAvailable(context, k, optdep)
+                                    unresolved.add(_optdep)
                 if unresolved:
                     print("new optional deps:", [x.name for x in unresolved])
                     for dep in list(unresolved):
