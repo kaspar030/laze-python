@@ -154,7 +154,7 @@ def yaml_load(
                                 merge(entry, deepcopy(defaults_val), join_lists=True)
                         else:
                             # print("yaml_load(): merging defaults,", data_val)
-                            if data_val == None:
+                            if data_val is None:
                                 data_val = {}
                                 data[defaults_key] = data_val
                             merge(
@@ -231,7 +231,7 @@ def yaml_load(
                     dl_source = {
                         "local": {
                             "path": os.path.join(
-                                get_data_folder(), url[len("$laze/") :]
+                                get_data_folder(), url[len("$laze/"):]
                             )
                         }
                     }
@@ -264,7 +264,7 @@ def yaml_load(
                 # print("YY", imported_list)
                 name, importer_filename, folder = imported
                 import_file = find_import_file(folder)
-                if import_file == None:
+                if import_file is None:
                     print(
                         "laze: error: folder %s (imported by %s) doesn't contain any laze build file."
                         % (folder, importer_filename)
@@ -300,7 +300,7 @@ class Declaration(object):
         pass
 
     def locate_source(self, filename=None):
-        if filename == None:
+        if filename is None:
             filename = ""
         if self.override_source_location:
             res = os.path.join(self.override_source_location, filename)
@@ -532,7 +532,7 @@ class Rule(Declaration):
         var_names = []
         for name in _var_names:
             name = name[2:-1]
-            if not name in {"in", "out"}:
+            if name not in {"in", "out"}:
                 var_names.append(name)
         # print("RULE", self.name, "vars:", var_names)
         self.var_set = set(var_names)
