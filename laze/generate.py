@@ -801,7 +801,7 @@ class Module(Declaration):
                 patches[:] = [os.path.join(os.path.abspath(self.relpath), patch) for patch in patches]
                 patch_rule = Rule.get_by_name("PATCH")
                 patched = os.path.join(dldir, ".patched")
-                res = patch_rule.to_ninja_build(writer, patches, patched, None, res)
+                res = patch_rule.to_ninja_build(writer, patches, patched, {"COMMIT": commit}, res)
 
             return res
 
