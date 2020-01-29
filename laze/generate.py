@@ -289,7 +289,6 @@ class Declaration(object):
         self.args = kwargs
         self.relpath = self.args.get("_relpath")
         self.root = self.args.get("_import_root") or "."
-        self.override_source_location = None
 
         _vars = self.args.get("vars", {})
         for key, value in _vars.items():
@@ -298,15 +297,6 @@ class Declaration(object):
 
     def post_parse():
         pass
-
-    def locate_source(self, filename=None):
-        if filename is None:
-            filename = ""
-        if self.override_source_location:
-            res = os.path.join(self.override_source_location, filename)
-        else:
-            res = os.path.join(self.relpath, filename)
-        return res.rstrip("/") or "."
 
 
 class Context(Declaration):
@@ -685,10 +675,12 @@ class Module(Declaration):
         self.used_deps_cache = {}
         self.build_deps = []
 
+        self.override_source_location = None
         self.custom_build_rule = None
         self.handle_custom_build()
 
         self.dldir = None
+        self.is_prepared = False
 
     @staticmethod
     def post_parse():
@@ -741,7 +733,8 @@ class Module(Declaration):
             rule = Rule(
                 **{
                     "name": "PREPARE_%s_%s" % (self.name, n),
-                    "cmd": " && ".join(prepare["cmd"]),
+                    "cmd": "(" + " && ".join(prepare["cmd"]) + ";)" +
+                        " && touch ${out}",
                 })
             vars = {"srcdir": self.dldir}
             rule.to_ninja_build(writer, None, out, vars, last_prepare_dep)
@@ -993,6 +986,18 @@ class Module(Declaration):
             dep_defines.append("-DMODULE_" + dep_name.upper().translate(transtab))
         return dep_defines
 
+    def locate_source(self, filename=None, srcdir=None):
+        if filename is None:
+            filename = ""
+        if srcdir:
+            pass
+        elif self.override_source_location:
+            srcdir = self.override_source_location
+        else:
+            srcdir = self.relpath
+        res = os.path.join(srcdir, filename)
+        return res.rstrip("/") or "."
+
 
 rec_dd = lambda: defaultdict(rec_dd)
 
@@ -1177,7 +1182,7 @@ class App(Module):
             module_dict["context"] = module.context.name
 
             if _sources:
-                module_dict["sources"] = listify(_sources)
+                module_dict["sources"] = _sources
             if _deps:
                 module_dict["deps"] = _deps.copy()
             if _uses:
