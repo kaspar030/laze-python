@@ -27,6 +27,8 @@ def check_log(log, quickcheck=False):
                 changed.append(filename)
     if not quickcheck:
         return changed
+    else:
+        return True
 
 
 def read_log(logfile, quickcheck=False):
