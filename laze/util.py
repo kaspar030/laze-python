@@ -299,3 +299,16 @@ def deep_update(d, u):
         else:
             d[k] = v
     return d
+
+
+# compares a and b, *after* removing every key in filter from both.
+# first creates a copy, thus does not change the arguments
+def compare_dict_without(a, b, filter):
+    a = a.copy()
+    b = b.copy()
+
+    for key in filter:
+        a.pop(key)
+        b.pop(key)
+
+    return a == b

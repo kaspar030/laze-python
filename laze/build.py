@@ -6,7 +6,7 @@ import sys
 
 import click
 
-from laze.util import load_dict, split
+from laze.util import load_dict, split, compare_dict_without
 from laze.common import (
     determine_dirs,
     rel_start_dir,
@@ -77,23 +77,39 @@ def build(
     os.chdir(project_root)
 
     targets = list(targets)
+    target_set = set(targets)
+
     builders = list(builders)
-    if builders:
-        builder_set = set(builders)
-    if targets:
-        target_set = set(targets)
+    builder_set = set(builders)
 
     try:
-        if (
-            laze.mtimelog.read_log(os.path.join(build_dir, "laze-files.mp"), True)
-            == False
-        ):
+        if not laze.mtimelog.read_log(os.path.join(build_dir, "laze-files.mp"), True):
             print("laze: buildfiles changed")
             laze_args = None
         else:
+            # here we figure out if there has already been a generate step that
+            # we can re-use.
+
             laze_args = load_dict((build_dir, "laze-args"))
 
-            if laze_args != generate_args:
+            if laze_args == generate_args:
+                # args identical, continue
+                print("laze: re-using generated build files")
+                pass
+
+            elif compare_dict_without(laze_args, generate_args, ["apps", "builders"]):
+                laze_targets = set(laze_args["apps"])
+                laze_builders = set(laze_args["builders"])
+                if (((not laze_targets) or (target_set and target_set.issubset(laze_targets)))
+                    and
+                    ((not laze_builders) or (builder_set and builder_set.issubset(laze_builders)))
+                ):
+                    print("laze: targets configured, re-using lazed build files")
+                    print(laze_targets, not laze_targets, not laze_builders)
+                else:
+                    laze_args = None
+
+            else:
                 laze_args = None
 
     except FileNotFoundError:
@@ -140,15 +156,25 @@ def build(
     else:
         _rel_start_dir = rel_start_dir(start_dir, project_root)
 
+        if _rel_start_dir == ".":
+            dir_text = "current folder"
+        else:
+            dir_text = '"%s"' % _rel_start_dir
+
         print('laze: local mode in "%s"' % _rel_start_dir)
 
         try:
             laze_local = load_dict((build_dir, "laze-app-per-folder"))[_rel_start_dir]
         except KeyError:
-            print(
-                'laze: no targets defined in "%s" that match %s'
-                % (_rel_start_dir, targets or "all")
-            )
+            if targets:
+                print(
+                    'laze: no targets defined in %s that match %s'
+                    % (dir_text, targets)
+                )
+            else:
+                print(
+                    'laze: no targets defined in %s.' % dir_text
+                )
             sys.exit(1)
 
         ninja_targets = []
