@@ -1249,7 +1249,13 @@ class App(Module):
                 module_dict["used"] = [x.name for x in module_used]
 
             module_vars = context.process_var_options(module_vars)
-            module_vars_flattened = finalize_vars(module_vars)
+            try:
+                module_vars_flattened = finalize_vars(module_vars)
+            except KeyError as e:
+                print("laze: error: in context %s (parent %s): unknown"
+                      "variable %s" %
+                      (context.name, context.parent.name, e.args[0]))
+                sys.exit(1)
 
             for source in sources:
                 source_in = module.locate_source(source)
