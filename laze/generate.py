@@ -1125,6 +1125,7 @@ class App(Module):
             parent=builder,
             vars={"app": self.name, "builder": builder_name},
             tools=self.tools,
+            disable_modules=self.args.get("disable_modules", []),
             _relpath=self.relpath,
             _builddir=self.args.get("_builddir"),
         )
