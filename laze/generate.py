@@ -836,7 +836,7 @@ class Module(Declaration):
                 dep = context.get_module(dep_name)
                 if dep is not None:
                     try:
-                        dep.get_deps(context)
+                        dep.get_deps(context, resolved, unresolved, optional)
                     except Module.NotAvailable:
                         continue
                 else:
