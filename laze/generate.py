@@ -473,7 +473,17 @@ class Context(Declaration):
 
 class Builder(Context):
     yaml_name = "builder"
-    pass
+
+    @staticmethod
+    def get():
+        for _, builder in Context.map.items():
+            if builder.__class__ == Builder:
+                yield builder
+
+    @staticmethod
+    def get_names():
+        for builder in Builder.get():
+            yield builder.name
 
 
 class Rule(Declaration):
@@ -1041,10 +1051,7 @@ class App(Module):
             return
 
         appdict = App.global_apps_data[self.name] = {}
-        for _, builder in Context.map.items():
-            if builder.__class__ != Builder:
-                continue
-
+        for builder in Builder.get():
             builderdict = appdict[builder.name] = {}
             if not (
                     builder.listed(self.whitelist, empty_val=True)
@@ -1058,6 +1065,20 @@ class App(Module):
                 continue
 
             yield builder, builderdict
+
+    @staticmethod
+    def get_app_builder():
+        for app in App.list:
+            for builder, _ in app.check_build():
+                yield app, builder
+
+
+    @staticmethod
+    def get_app_builder_names():
+        # WARNING: needs Context.post_parse() step
+        for app, builder in App.get_app_builder():
+            yield app.name, builder.name
+
 
     @staticmethod
     def post_parse():
