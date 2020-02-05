@@ -73,7 +73,6 @@ def build(
     ninja_build_file = os.path.join(build_dir, "build.ninja")
     ninja_build_args_file = os.path.join(build_dir, "build-args.ninja")
 
-    laze_binary = sys.argv[0]
     os.chdir(project_root)
 
     targets = list(targets)
