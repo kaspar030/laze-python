@@ -878,7 +878,7 @@ class Module(Declaration):
                                         raise Module.NotAvailable(context, k, optdep)
                                     unresolved.add(_optdep)
                 if unresolved:
-                    print("new optional deps:", [x.name for x in unresolved])
+                    # print("new optional deps:", [x.name for x in unresolved])
                     for dep in list(unresolved):
                         dep.get_deps(context, resolved, unresolved, optional)
                     continue
