@@ -4,16 +4,9 @@ import os
 import re
 import sys
 import time
-import yaml
 from multiprocessing import Pool
 
-# try to use libyaml (faster C-based yaml lib),
-# fallback to pure python version
-try:
-    from yaml import CLoader as Loader, CDumper as Dumper
-except ImportError:
-    print("laze: warning: using slow python-based yaml loader")
-    from yaml import SafeLoader as Loader, Dumper
+from .yaml import yaml, BaseLoader, Loader, Dumper
 
 from .deepcopy import deepcopy
 from collections import defaultdict
@@ -35,6 +28,7 @@ from .util import (
     split,
     static_vars,
     uniquify,
+    yaml_fixup_empty_strings
 )
 
 from ninja_syntax import Writer
@@ -114,7 +108,7 @@ def yaml_load(
 
     try:
         with open(filename, "r") as f:
-            datas = yaml.load_all(f.read(), Loader=Loader)
+            datas = yaml.load_all(f.read(), Loader=BaseLoader)
     except FileNotFoundError as e:
         msg = "laze: error: cannot find %s%s" % (
             filename,
@@ -125,6 +119,10 @@ def yaml_load(
     res = []
     try:
         for data in datas:
+            # BaseLoder parses "foo:" as { "foo" : '' }.
+            # fix up to { "foo" : None }
+            yaml_fixup_empty_strings(data)
+
             if import_root is not None:
                 data["_import_root"] = import_root
 
@@ -154,7 +152,7 @@ def yaml_load(
                                 merge(entry, deepcopy(defaults_val), join_lists=True)
                         else:
                             # print("yaml_load(): merging defaults,", data_val)
-                            if data_val is None:
+                            if not data_val:
                                 data_val = {}
                                 data[defaults_key] = data_val
                             merge(

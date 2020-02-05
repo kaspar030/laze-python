@@ -4,15 +4,7 @@ import os
 import traceback
 import collections
 
-# try to use libyaml (faster C-based yaml lib),
-# fallback to pure python version
-import yaml
-
-try:
-    from yaml import CLoader as Loader, CDumper as Dumper
-except ImportError:
-    print("laze: warning: using slow python-based yaml loader")
-    from yaml import Loader, Dumper  # type: ignore
+from .yaml import yaml, Dumper, Loader
 
 from collections import defaultdict
 from itertools import product, chain
@@ -312,3 +304,18 @@ def compare_dict_without(a, b, filter):
         b.pop(key)
 
     return a == b
+
+
+def yaml_fixup_empty_strings(something):
+    """ turn empy strings ('') to None """
+
+    if type(something) == str:
+        if something == '':
+            return None
+    elif type(something) == list:
+        something[:] = [yaml_fixup_empty_strings(x) for x in something]
+    elif type(something) == dict:
+        for key, value in something.items():
+            something[key] = yaml_fixup_empty_strings(value)
+
+    return something
