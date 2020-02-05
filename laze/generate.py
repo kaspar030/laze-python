@@ -1418,7 +1418,7 @@ def generate(**kwargs):
         import_root = data.get("_import_root", "")
         for _class in classes:
             if (
-                (_global is not True)
+                (not _global)
                 and (_class.yaml_name == "app")
                 and (relpath != _rel_start_dir)
             ):
