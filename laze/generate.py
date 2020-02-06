@@ -408,7 +408,7 @@ class Context(Declaration):
 
     def get_module(self, module_name):
         if module_name in self.disabled_modules:
-            print("DISABLED_MODULE", self.name, module_name)
+            # print("DISABLED_MODULE", self.name, module_name)
             return None
 
         module = self.modules.get(module_name)
