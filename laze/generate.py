@@ -1117,7 +1117,8 @@ class App(Module):
                 nbuilds += 1
                 builder_app_map[builder].append((app, builderdict))
 
-        if nbuilds < 10:
+        # limit multi-threaded parsing
+        if nbuilds < 20 or len(builder_app_map.keys()) < 2:
             print("laze: single-threaded mode")
             _map = map
 
