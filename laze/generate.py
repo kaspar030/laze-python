@@ -1362,9 +1362,6 @@ class App(Module):
         return builderdict, objects, link_target, _depends, app_per_folder, _tools
 
 
-classes = [Context, Builder, Rule, Module, App, ]
-
-
 @click.command()
 @click.option("--project-file", "-f", type=click.STRING, envvar="LAZE_PROJECT_FILE")
 @click.option("--project-root", "-r", type=click.STRING, envvar="LAZE_PROJECT_ROOT")
@@ -1378,9 +1375,12 @@ classes = [Context, Builder, Rule, Module, App, ]
 )
 @click.option("--args-file", "-A", type=click.Path(), envvar="LAZE_ARGS_FILE")
 @click.option("--dump-data", "-d", is_flag=True, default=False, envvar="LAZE_DUMP_DATA")
+@click.option("--list-builders", is_flag=True, default=False,
+              envvar="LAZE_LIST_BUILDERS")
 def generate(**kwargs):
     global writer
     global global_build_dir
+    classes = [Context, Builder, Rule, Module, App, ]
 
     args_file = kwargs.get("args_file")
     if args_file:
@@ -1398,6 +1398,7 @@ def generate(**kwargs):
 
     start_dir, build_dir, project_root, project_file = determine_dirs(args)
     global_build_dir = build_dir
+    need_writer = True
 
     os.chdir(project_root)
 
@@ -1415,29 +1416,33 @@ def generate(**kwargs):
     try:
         data_list = yaml_load(project_file)
     except ParseError as e:
-        print(e)
-        sys.exit(1)
+        sys.exit(0)
 
     print(
         "laze: loading %i buildfiles took %.2fs"
         % (len(files_set), time.time() - before)
     )
 
-    ninja_build_file = os.path.join(build_dir, "build.ninja")
-    ninja_build_args_file = os.path.join(build_dir, "build-args.ninja")
-    ninja_build_file_deps = ninja_build_file + ".d"
+    if kwargs.get("list_builders", False):
+        need_writer = False
+        classes = [Builder]
 
-    writer = Writer(open(ninja_build_file, "w"))
-    writer.variable("builddir", build_dir)
+    if need_writer:
+        ninja_build_file = os.path.join(build_dir, "build.ninja")
+        ninja_build_args_file = os.path.join(build_dir, "build-args.ninja")
+        ninja_build_file_deps = ninja_build_file + ".d"
 
-    # create rule for automatically re-running laze if necessary
-    write_ninja_build_args_file(
-        ninja_build_args_file,
-        ninja_build_file,
-        ninja_build_file_deps,
-        args_file,
-        build_dir,
-    )
+        writer = Writer(open(ninja_build_file, "w"))
+        writer.variable("builddir", build_dir)
+
+        # create rule for automatically re-running laze if necessary
+        write_ninja_build_args_file(
+            ninja_build_args_file,
+            ninja_build_file,
+            ninja_build_file_deps,
+            args_file,
+            build_dir,
+        )
 
     before = time.time()
     # PARSING PHASE
@@ -1459,6 +1464,17 @@ def generate(**kwargs):
                 _data["_builddir"] = build_dir
                 _data["_import_root"] = import_root
                 _class(**_data)
+
+    #
+    if kwargs.get("list_builders", False):
+        for data in data_list:
+            datas = listify(data.get(Builder.yaml_name, []))
+            for _data in datas:
+                Builder(**_data)
+
+            for builder in Builder.get_names():
+                print(builder)
+            sys.exit(0)
 
     no_post_parse_classes = {Builder}
 
