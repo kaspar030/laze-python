@@ -416,6 +416,41 @@ class Context(Declaration):
             module = self.parent.get_module(module_name)
         return module
 
+    def is_module_available(self, module_name):
+        if module_name in self.disabled_modules:
+            return False
+
+        elif module_name in self.modules.keys():
+            return True
+
+        elif self.parent:
+            return self.parent.is_module_available(module_name)
+
+        else:
+            return False
+
+    def is_module_available_recursive(self, module_name, seen=None):
+        #print("is_module_available_recursive(%s)" % module_name)
+        if seen is None:
+            seen = set()
+        else:
+            if module_name in seen:
+                return True
+
+        seen.add(module_name)
+
+        if not self.is_module_available(module_name):
+            return False
+        module = self.get_module(module_name)
+        for dep_name in module.depends:
+            #print("is_module_available_recursive(%s)" % module_name, dep_name)
+            if dep_name.startswith("?"):
+                continue
+            if not self.is_module_available_recursive(dep_name, seen):
+                return False
+
+        return True
+
     def get_vars(self):
         if self.vars:
             pass
@@ -840,20 +875,13 @@ class Module(Declaration):
 
             if dep_name.startswith("?"):
                 dep_name = dep_name[1:]
-
-                dep = context.get_module(dep_name)
-                if dep is not None:
-                    try:
-                        dep.get_deps(context, resolved, unresolved, optional)
-                    except Module.NotAvailable:
-                        continue
-                else:
+                if not context.is_module_available_recursive(dep_name):
                     continue
-            else:
-                dep = context.get_module(dep_name)
 
-                if dep is None:
-                    raise Module.NotAvailable(context, self.name, dep_name)
+            dep = context.get_module(dep_name)
+
+            if dep is None:
+                raise Module.NotAvailable(context, self.name, dep_name)
 
             if dep not in resolved:
                 if dep in unresolved:
